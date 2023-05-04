@@ -6,10 +6,10 @@ import {
   UnicodeSimpleCategory,
 } from "./utilities.ts";
 
-type pos = [number, number];
+type Position = [number, number];
 
-export function matchMentions(str: string): pos[] {
-  const result: pos[] = [];
+export function matchMentions(str: string): Position[] {
+  const result: Position[] = [];
   const begin = 0, end = str.length;
   let pos = begin;
 
@@ -38,8 +38,8 @@ export function matchMentions(str: string): pos[] {
   return result;
 }
 
-export function matchBotCommands(str: string): pos[] {
-  const result: pos[] = [];
+export function matchBotCommands(str: string): Position[] {
+  const result: Position[] = [];
   const begin = 0, end = str.length;
   let pos = begin;
 
@@ -101,8 +101,8 @@ export function matchBotCommands(str: string): pos[] {
   return result;
 }
 
-export function matchHashtags(str: string): pos[] {
-  const result: pos[] = [];
+export function matchHashtags(str: string): Position[] {
+  const result: Position[] = [];
   const begin = 0, end = str.length;
   let pos = begin;
 
@@ -147,8 +147,8 @@ export function matchHashtags(str: string): pos[] {
   return result;
 }
 
-export function matchCashtags(str: string): pos[] {
-  const result: pos[] = [];
+export function matchCashtags(str: string): Position[] {
+  const result: Position[] = [];
   const begin = 0, end = str.length;
   let pos = begin;
 
