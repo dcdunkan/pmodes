@@ -6,68 +6,66 @@ import {
   UnicodeSimpleCategory,
 } from "./utilities.ts";
 
-type Positions = [number, number][];
+type pos = [number, number];
 
-/** Find positions of valid mentions in a given text. */
-export function findMentions(text: string) {
-  const result: Positions = [];
-  let position = 0;
-  const begin = 0, end = text.length;
+export function matchMentions(str: string): pos[] {
+  const result: pos[] = [];
+  const begin = 0, end = str.length;
+  let pos = begin;
 
-  while (position < end) {
-    // check the rest of the text for '@'
-    const atSymbol = text.substring(position).indexOf("@");
+  while (pos < end) {
+    // check the rest of the str for '@'
+    const atSymbol = str.substring(pos).indexOf("@");
     if (atSymbol == -1) break; // no more possible mentions found.
-    position += atSymbol;
+    pos += atSymbol;
 
     // if the previous char is a blocking character:
-    if (position != begin && isWordCharacter(text.charCodeAt(position - 1))) {
-      position++;
+    if (pos != begin && isWordCharacter(str.charCodeAt(pos - 1))) {
+      pos++;
       continue;
     }
-    const mentionBegin = ++position; // starts without the '@'
-    while (position != end && isAlphaDigitOrUnderscore(text[position])) {
-      position++; // incr. if the character is okay
+    const mentionBegin = ++pos; // starts without the '@'
+    while (pos != end && isAlphaDigitOrUnderscore(str[pos])) {
+      pos++; // incr. if the character is okay
     }
-    const mentionEnd = position;
+    const mentionEnd = pos;
     const size = mentionEnd - mentionBegin;
     if (size < 2 || size > 32) continue;
-    // if (isWordCharacter(text.charCodeAt(position))) continue;
+    // if (isWordCharacter(str.charCodeAt(pos))) continue;
     result.push([mentionBegin - 1, mentionEnd]);
   }
 
   return result;
 }
 
-/** Find positions of valid bot commands in a given text. */
-export function findBotCommands(text: string) {
-  const result: Positions = [];
-  let position = 0;
-  const begin = 0, end = text.length;
+export function matchBotCommands(str: string): pos[] {
+  const result: pos[] = [];
+  const begin = 0, end = str.length;
+  let pos = begin;
 
-  while (position < end) {
-    // check the rest of the text for possible commands.
-    const slashSymbol = text.substring(position).indexOf("/");
+  while (pos < end) {
+    // check the rest of the str for possible commands.
+    const slashSymbol = str.substring(pos).indexOf("/");
     if (slashSymbol == -1) break; // no possible commands.
-    position += slashSymbol;
+    pos += slashSymbol;
 
     // check if the prev character is okay
-    if (position != begin) {
-      const prev = text[position - 1];
+    if (pos != begin) {
+      const prev = str[pos - 1];
       if (
         isWordCharacter(prev.charCodeAt(0)) ||
         prev === "/" || prev === "<" || prev === ">" // apparently these too?
       ) {
-        position++;
+        pos++;
         continue;
       }
     }
 
-    const commandBegin = ++position; // except the "/"
-    while (position != end && isAlphaDigitOrUnderscore(text[position])) {
-      position++; // increment if the current char is okay.
+    const commandBegin = ++pos; // except the "/"
+    while (pos != end && isAlphaDigitOrUnderscore(str[pos])) {
+      pos++; // increment if the current char is okay.
     }
-    let commandEnd = position;
+    let commandEnd = pos;
     const commandSize = commandEnd - commandBegin;
     if (commandSize < 1 || commandSize > 64) continue;
 
@@ -75,22 +73,22 @@ export function findBotCommands(text: string) {
     const commandEndBackup = commandEnd;
 
     // check for the bot mention part of the command
-    if (position != end && text[position] === "@") {
-      const mentionBegin = ++position; // except the "@"
-      while (position != end && isAlphaDigitOrUnderscore(text[position])) {
-        position++; // increment if the current char is oky.
+    if (pos != end && str[pos] === "@") {
+      const mentionBegin = ++pos; // except the "@"
+      while (pos != end && isAlphaDigitOrUnderscore(str[pos])) {
+        pos++; // increment if the current char is oky.
       }
-      const mentionEnd = position;
+      const mentionEnd = pos;
       const mentionSize = mentionEnd - mentionBegin;
       if (mentionSize >= 3 && mentionSize <= 32) {
-        commandEnd = position;
+        commandEnd = pos;
         hasMention = true;
       }
     }
 
     // is the next character okay??
-    if (position != end) {
-      const next = text[position];
+    if (pos != end) {
+      const next = str[pos];
       if (next === "/" || next === "<" || next === ">") {
         if (!hasMention) continue;
         commandEnd = commandEndBackup;
@@ -103,45 +101,82 @@ export function findBotCommands(text: string) {
   return result;
 }
 
-export function findHashtags(text: string) {
-  const result: Positions = [];
-  let position = 0;
-  const begin = 0, end = text.length;
+export function matchHashtags(str: string): pos[] {
+  const result: pos[] = [];
+  const begin = 0, end = str.length;
+  let pos = begin;
 
-  while (position < end) {
-    const hashSymbol = text.substring(position).indexOf("#");
+  let category: UnicodeSimpleCategory = 0;
+
+  while (pos < end) {
+    const hashSymbol = str.substring(pos).indexOf("#");
     if (hashSymbol == -1) break;
-    position += hashSymbol;
+    pos += hashSymbol;
 
-    if (position != begin) {
-      const prev = text.charCodeAt(position - 1);
+    if (pos != begin) {
+      const prev = str.charCodeAt(pos - 1);
+      category = getUnicodeSimpleCategory(prev);
       if (isHashtagLetter(prev)) {
-        position++;
+        pos++;
         continue;
       }
     }
 
-    const hashtagBegin = ++position;
+    const hashtagBegin = ++pos;
     let hashtagSize = 0, hashtagEnd = 0;
     let wasLetter = false;
 
-    while (position != end) {
-      const category = getUnicodeSimpleCategory(text.charCodeAt(position));
-      if (!isHashtagLetter(text.charCodeAt(position))) break;
-      position++;
-      if (hashtagSize == 255) hashtagEnd = position;
+    while (pos != end) {
+      category = getUnicodeSimpleCategory(str.charCodeAt(pos));
+      if (!isHashtagLetter(str.charCodeAt(pos))) break;
+      pos++;
+      if (hashtagSize == 255) hashtagEnd = pos;
       if (hashtagSize != 256) {
         wasLetter ||= category == UnicodeSimpleCategory.Letter;
         hashtagSize++;
       }
     }
 
-    if (!hashtagEnd) hashtagEnd = position;
+    if (!hashtagEnd) hashtagEnd = pos;
     if (hashtagSize < 1) continue;
-    if (text[position] === "#") continue;
+    if (pos != end && str[pos] === "#") continue;
     if (!wasLetter) continue;
     result.push([hashtagBegin - 1, hashtagEnd]);
   }
 
   return result;
 }
+
+export function getValidShortUsernames() {
+  return [
+    "gif",
+    "wiki",
+    "vid",
+    "bing",
+    "pic",
+    "bold",
+    "imdb",
+    "coub",
+    "like",
+    "vote",
+  ];
+}
+
+/** Find poss of valid mentions in a given str. */
+export function findMentions(str: string) {
+  return matchMentions(str).filter(([start, end]) => {
+    const mention = str.substring(start + 1, end);
+    if (mention.length >= 4) return true;
+    return getValidShortUsernames().includes(mention.toLowerCase());
+  });
+}
+
+/** Find poss of valid bot commands in a given str. */
+export function findBotCommands(str: string) {
+  return matchBotCommands(str);
+}
+
+export function findHashtags(str: string) {
+  return matchHashtags(str);
+}
+
