@@ -1,168 +1,158 @@
-import { assert, assertEquals } from "./deps_test.ts";
-import { findBotCommands, findHashtags, findMentions } from "./match.ts";
+import { assertEquals } from "./deps_test.ts";
+import {
+  findBotCommands,
+  findCashtags,
+  findHashtags,
+  findMentions,
+} from "./match.ts";
 
-interface TestCase {
-  /** Name of the test step */
-  name: string;
-  /** The text that should be parsed */
-  text: string;
-  /** Array of the expected entities' start and end position */
-  expected: [number, number][];
-  /** The found entities */
-  result: string[];
+function checkFn(fn: (text: string) => [number, number][]) {
+  return (text: string, expected: string[]) => {
+    assertEquals(fn(text).map(([s, e]) => text.substring(s, e)), expected);
+  };
 }
 
-const functions = {
-  mentions: findMentions,
-  commands: findBotCommands,
-  hashtags: findHashtags,
-};
+Deno.test("mentions", () => {
+  const check = checkFn(findMentions);
+  check("@mention", ["@mention"]);
+  check("@mention ", ["@mention"]);
+  check(" @mention", ["@mention"]);
+  check(" @mention ", ["@mention"]);
+  check("@abc @xyz @abc @xyz @xxx@yyy @ttt", []);
+  check(
+    "@abcde @xyzxy @abcde @xyzxy @xxxxx@yyyyy @ttttt",
+    ["@abcde", "@xyzxy", "@abcde", "@xyzxy", "@xxxxx", "@ttttt"],
+  );
+  check("no@mention", []);
+  check("@n", []);
+  check("@abcdefghijklmnopqrstuvwxyz123456", [
+    "@abcdefghijklmnopqrstuvwxyz123456",
+  ]);
+  check("@abcdefghijklmnopqrstuvwxyz1234567", []);
+  check("нет@mention", []);
+  check(
+    "@ya @gif @wiki @vid @bing @pic @bold @imdb @ImDb @coub @like @vote @giff @cap ya cap @y @yar @bingg @bin",
+    [
+      "@gif",
+      "@wiki",
+      "@vid",
+      "@bing",
+      "@pic",
+      "@bold",
+      "@imdb",
+      "@ImDb",
+      "@coub",
+      "@like",
+      "@vote",
+      "@giff",
+      "@bingg",
+    ],
+  );
+});
 
-const testcases: Record<keyof typeof functions, TestCase[]> = {
-  mentions: [
-    {
-      name: "should match simple mentions",
-      text: "normal @mentions between @te_t and stuff",
-      expected: [[7, 16], [25, 30]],
-      result: ["@mentions", "@te_t"],
-    },
-    {
-      name: "should only match first one in @mention@mention",
-      text: "weird @mention@mention.",
-      expected: [[6, 14]],
-      result: ["@mention"],
-    },
-    {
-      name: "should not match mentions prefixed with non-special char",
-      text: "heh 4@mention x@mention",
-      expected: [],
-      result: [],
-    },
-    {
-      name: "should match mentions prefixed with special char",
-      text: "hehe #@mention $@mention /@mention -@mention",
-      expected: [[6, 14], [16, 24], [26, 34], [36, 44]],
-      result: ["@mention", "@mention", "@mention", "@mention"],
-    },
-    {
-      name: "should not match mentions prefixed with an underscore",
-      text: "hehe _@mention",
-      expected: [],
-      result: [],
-    },
-    {
-      name: "should not match mentions less than 3 characters",
-      text: "@m",
-      expected: [],
-      result: [],
-    },
-    {
-      name: "should not match mentions more than 32 characters",
-      text: "@123456789012345678901234567890123",
-      expected: [],
-      result: [],
-    },
-    {
-      name: "should not include non-alpha-digit-underscore prefix",
-      text: "@dont₣",
-      expected: [[0, 5]],
-      result: ["@dont"],
-    },
-  ],
-  commands: [
-    {
-      name: "should match simple commands",
-      text: "simple /commands between /te_t",
-      expected: [[7, 16], [25, 30]],
-      result: ["/commands", "/te_t"],
-    },
-    {
-      name: "should not match commands prefixed with / or < or > or _",
-      text: "//slash </lt >/gt _/underscore",
-      expected: [],
-      result: [],
-    },
-    {
-      name: "should match commands prefixed with other than / or < or > or _",
-      text: "./period -/hyphen",
-      expected: [[1, 8], [10, 17]],
-      result: ["/period", "/hyphen"],
-    },
-    {
-      name: "should not match commands suffixed with / or < or >",
-      text: "/slash/ /lt< /gt>",
-      expected: [],
-      result: [],
-    },
-    {
-      name: "should match commands suffixed with other than / or < or >",
-      text: "/hyphen- /underscore_ /kek#",
-      expected: [[0, 7], [9, 21], [22, 26]],
-      result: ["/hyphen", "/underscore_", "/kek"],
-    },
-    {
-      name: "should match commands with mention",
-      text: "/command@bot /kek@user_name",
-      expected: [[0, 12], [13, 27]],
-      result: ["/command@bot", "/kek@user_name"],
-    },
-    {
-      name: "should not include mention ending with / or > or <",
-      text: "/kek@kek/",
-      expected: [[0, 4]],
-      result: ["/kek"],
-    },
-    {
-      name: "should not include @ at the end",
-      text: "/kek@",
-      expected: [[0, 4]],
-      result: ["/kek"],
-    },
-    {
-      name:
-        "should not match mentions in commands with mention.length < 3 or > 32",
-      text: "/cmd@12 /cmd@123456789012345678901234567890123",
-      expected: [[0, 4], [8, 12]],
-      result: ["/cmd", "/cmd"],
-    },
-    {
-      name: "should not match commands less than 1 char",
-      text: "/",
-      expected: [],
-      result: [],
-    },
-    {
-      name: "should not match commands more than 64 char",
-      text:
-        "/12345678901234567890123456789012345678901234567890123456789012345",
-      expected: [],
-      result: [],
-    },
-  ],
-  // TODO: add more hashtag tests
-  hashtags: [
-    {
-      name: "should match multi-lingual simple hashtags",
-      text: "#hashtag #schön #മലyalam",
-      expected: [[0, 8], [9, 15], [16, 24]],
-      result: ["#hashtag", "#schön", "#മലyalam"],
-    },
-  ],
-};
+Deno.test("bot commands", () => {
+  const check = checkFn(findBotCommands);
+  // 1..64@3..32
+  check("/abc", ["/abc"]);
+  check(" /abc", ["/abc"]);
+  check("/abc ", ["/abc"]);
+  check(" /abc ", ["/abc"]);
+  check("/a@abc", ["/a@abc"]);
+  // TODO: ask about this to @levlam. because, in the original tests,
+  // it is NOT supposed to match "/a". and according to the original
+  // matching function, it should match "/a". (as far as i understood).
+  // and bot api does too :/ i'm confused.
+  check("/a@b", ["/a"]); // hmmmm...
+  check("/@bfdsa", []);
+  check("/test/", []);
+});
 
-for (const test in testcases) {
-  Deno.test(test, async ({ step }) => {
-    for (const testcase of testcases[test as keyof typeof testcases]) {
-      if (testcase.expected == null) continue; // useful while writing test cases.
-      await step(testcase.name, () => {
-        const actual = functions[test as keyof typeof functions](testcase.text);
-        assert(actual.length == testcase.expected.length);
-        assertEquals(actual, testcase.expected);
-        assertEquals(
-          actual.map(([s, e]) => testcase.text.substring(s, e)),
-          testcase.result,
-        );
-      });
-    }
-  });
-}
+Deno.test("hashtags", () => {
+  const check = checkFn(findHashtags);
+  check("", []);
+  check("#", []);
+  check("##", []);
+  check("###", []);
+  check("#a", ["#a"]);
+  check(" #a", ["#a"]);
+  check("#a ", ["#a"]);
+  check(" #я ", ["#я"]);
+  check(" я#a ", []);
+  check(" #a# ", []);
+  check(" #123 ", []);
+  check(" #123a ", ["#123a"]);
+  check(" #a123 ", ["#a123"]);
+  check(" #123a# ", []);
+  check(" #" + "1".repeat(300), []);
+  check(" #" + "1".repeat(256), []);
+  check(" #" + "1".repeat(256) + "a ", []);
+  check(" #" + "1".repeat(255) + "a", ["#" + "1".repeat(255) + "a"]);
+  check(" #" + "1".repeat(255) + "Я", ["#" + "1".repeat(255) + "Я"]);
+  check(" #" + "1".repeat(255) + "a" + "b".repeat(255) + "# ", []);
+  check("#a#b #c #d", ["#c", "#d"]);
+  check("#test", ["#test"]);
+  check("#te·st", ["#te·st"]);
+  check(
+    "\u{0001F604}\u{0001F604}\u{0001F604}\u{0001F604} \u{0001F604}\u{0001F604}\u{0001F604}#" +
+      "1".repeat(200) +
+      "ООО" + "2".repeat(200),
+    ["#" + "1".repeat(200) + "ООО" + "2".repeat(53)],
+  );
+  check("#a\u2122", ["#a"]);
+  check("#a൹", ["#a"]);
+  check("#aඁං෴ก฿", ["#aඁං෴ก"]);
+});
+
+Deno.test("cashtags", () => {
+  const check = checkFn(findCashtags);
+  check("", []);
+  check("$", []);
+  check("$$", []);
+  check("$$$", []);
+  check("$a", []);
+  check(" $a", []);
+  check("$a ", []);
+  check(" $я ", []);
+  check("$ab", []);
+  check("$abc", []);
+  check("$", []);
+  check("$A", ["$A"]);
+  check("$AB", ["$AB"]);
+  check("$ABС", []);
+  check("$АBC", []);
+  check("$АВС", []);
+  check("$ABC", ["$ABC"]);
+  check("$ABCD", ["$ABCD"]);
+  check("$ABCDE", ["$ABCDE"]);
+  check("$ABCDEF", ["$ABCDEF"]);
+  check("$ABCDEFG", ["$ABCDEFG"]);
+  check("$ABCDEFGH", ["$ABCDEFGH"]);
+  check("$ABCDEFGHJ", []);
+  check("$ABCDEFGH1", []);
+  check(" $XYZ", ["$XYZ"]);
+  check("$XYZ ", ["$XYZ"]);
+  check(" $XYZ ", ["$XYZ"]);
+  check(" $$XYZ ", []);
+  check(" $XYZ$ ", []);
+  check(" $ABC1 ", []);
+  check(" $1ABC ", []);
+  check(" 1$ABC ", []);
+  check(" А$ABC ", []);
+  check("$ABC$DEF $GHI $KLM", ["$GHI", "$KLM"]);
+  check("$TEST", ["$TEST"]);
+  check("$1INC", []);
+  check("$1INCH", ["$1INCH"]);
+  check("...$1INCH...", ["$1INCH"]);
+  check("$1inch", []);
+  check("$1INCHA", []);
+  check("$1INCHА", []);
+  check("$ABC\u2122", ["$ABC"]);
+  check("\u2122$ABC", ["$ABC"]);
+  check("\u2122$ABC\u2122", ["$ABC"]);
+  check("$ABC൹", ["$ABC"]);
+  check("$ABCඁ", []);
+  check("$ABCං", []);
+  check("$ABC෴", []);
+  check("$ABCก", []);
+  check("$ABC฿", ["$ABC"]);
+});
