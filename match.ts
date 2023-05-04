@@ -147,6 +147,44 @@ export function matchHashtags(str: string): pos[] {
   return result;
 }
 
+export function matchCashtags(str: string): pos[] {
+  const result: pos[] = [];
+  const begin = 0, end = str.length;
+  let pos = begin;
+
+  while (pos < end) {
+    const dollarSymbol = str.substring(pos).indexOf("$");
+    if (dollarSymbol == -1) break;
+    pos += dollarSymbol;
+    if (pos != begin) {
+      const prev = str.charCodeAt(pos - 1);
+      if (isHashtagLetter(prev) || str[pos - 1] === "$") {
+        pos++;
+        continue;
+      }
+    }
+
+    const cashtagBegin = ++pos;
+    if ((end - pos) >= 5 && str.substring(pos, pos + 5) === "1INCH") {
+      pos += 5;
+    } else {
+      while ((pos != end) && "Z" >= str[pos] && str[pos] >= "A") {
+        pos++;
+      }
+    }
+    const cashtagEnd = pos;
+    const cashtagSize = cashtagEnd - cashtagBegin;
+    if (cashtagSize < 1 || cashtagSize > 8) continue;
+    if (cashtagEnd != end) {
+      const next = str.charCodeAt(pos);
+      if (isHashtagLetter(next) || str[pos] === "$") continue;
+    }
+    result.push([cashtagBegin - 1, cashtagEnd]);
+  }
+
+  return result;
+}
+
 export function getValidShortUsernames() {
   return [
     "gif",
@@ -180,3 +218,6 @@ export function findHashtags(str: string) {
   return matchHashtags(str);
 }
 
+export function findCashtags(str: string) {
+  return matchCashtags(str);
+}
