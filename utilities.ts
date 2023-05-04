@@ -1,4 +1,4 @@
-import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
+import { getCategory } from "https://esm.sh/unicode-properties@1.4.1";
 
 export function isWordCharacter(code: number) {
   switch (getUnicodeSimpleCategory(code)) {
@@ -20,15 +20,33 @@ export function isAlphaDigitOrUnderscore(c: string) {
   return isAlphaOrDigit(c) || c === "_";
 }
 
-export function isHashtagLetter(c: number) {
-  const category = getUnicodeSimpleCategory(c);
+export enum UnicodeSimpleCategory {
+  Unknown,
+  Letter,
+  DecimalNumber,
+  Number,
+  Separator,
+}
+
+export function getUnicodeSimpleCategory(
+  codepoint: number,
+): UnicodeSimpleCategory {
+  const category = getCategory(codepoint);
+  if (category === "Nd") return UnicodeSimpleCategory.DecimalNumber;
+  if (category[0] === "L") return UnicodeSimpleCategory.Letter;
+  if (category[0] === "N") return UnicodeSimpleCategory.Number;
+  if (category[0] === "Z") return UnicodeSimpleCategory.Separator;
+  return UnicodeSimpleCategory.Unknown;
+}
+
+export function isHashtagLetter(codepoint: number): boolean {
   if (
-    c == "_".charCodeAt(0) || c == 0x200c || c == 0xb7 ||
-    (0xd80 <= c && c <= 0xdff)
+    codepoint == "_".charCodeAt(0) || codepoint == 0x200c ||
+    codepoint == 0xb7 || (0xd80 <= codepoint && codepoint <= 0xdff)
   ) {
     return true;
   }
-  switch (category) {
+  switch (getUnicodeSimpleCategory(codepoint)) {
     case UnicodeSimpleCategory.DecimalNumber:
     case UnicodeSimpleCategory.Letter:
       return true;

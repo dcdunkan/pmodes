@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./deps_test.ts";
-import { findBotCommands, findMentions } from "./match.ts";
+import { findBotCommands, findHashtags, findMentions } from "./match.ts";
 
 interface TestCase {
   /** Name of the test step */
@@ -15,6 +15,7 @@ interface TestCase {
 const functions = {
   mentions: findMentions,
   commands: findBotCommands,
+  hashtags: findHashtags,
 };
 
 const testcases: Record<keyof typeof functions, TestCase[]> = {
@@ -136,6 +137,15 @@ const testcases: Record<keyof typeof functions, TestCase[]> = {
         "/12345678901234567890123456789012345678901234567890123456789012345",
       expected: [],
       result: [],
+    },
+  ],
+  // TODO: add more hashtag tests
+  hashtags: [
+    {
+      name: "should match multi-lingual simple hashtags",
+      text: "#hashtag #schön #മലyalam",
+      expected: [[0, 8], [9, 15], [16, 24]],
+      result: ["#hashtag", "#schön", "#മലyalam"],
     },
   ],
 };
