@@ -198,7 +198,7 @@ export function matchMediaTimestamps(str: string) {
 
     let mediaTimestampBegin = pos;
     while (
-      (mediaTimestampBegin) != begin &&
+      mediaTimestampBegin != begin &&
       (str[mediaTimestampBegin - 1] === ":" ||
         isDigit(str[mediaTimestampBegin - 1]))
     ) {
@@ -232,6 +232,65 @@ export function matchMediaTimestamps(str: string) {
     } else {
       pos = mediaTimestampEnd;
     }
+  }
+
+  return result;
+}
+
+export function matchBankCardNumbers(str: string) {
+  const result: Position[] = [];
+  const begin = 0, end = str.length;
+  let pos = begin;
+
+  while (pos < end) {
+    while (pos != end && !isDigit(str[pos])) pos++;
+    if (pos == end) break;
+    if (pos != begin) {
+      const prev = str[pos - 1];
+      if (
+        prev === "." || prev === "," || prev === "+" ||
+        prev === "-" || prev === "_" ||
+        getUnicodeSimpleCategory(prev.charCodeAt(0)) ===
+          UnicodeSimpleCategory.Letter
+      ) {
+        while (
+          pos != end &&
+          (isDigit(str[pos]) || str[pos] === " " || str[pos] === "-")
+        ) {
+          pos++;
+        }
+        continue;
+      }
+    }
+
+    const cardNumberBegin = pos;
+    let digitCount = 0;
+    while (
+      pos != end && (isDigit(str[pos]) || str[pos] === " " || str[pos] === "-")
+    ) {
+      if (
+        str[pos] === " " && digitCount >= 16 && digitCount <= 19 &&
+        digitCount === (pos - cardNumberBegin)
+      ) break;
+      digitCount += isDigit(str[pos]) ? 1 : 0;
+      pos++;
+    }
+    if (digitCount < 13 || digitCount > 19) continue;
+
+    let cardNumberEnd = pos;
+    while (!isDigit(str[cardNumberEnd - 1])) cardNumberEnd--;
+    const cardNumberSize = cardNumberEnd - cardNumberBegin;
+    if (cardNumberSize > 2 * digitCount - 1) continue;
+    if (cardNumberEnd != end) {
+      const next = str[cardNumberEnd];
+      if (
+        next === "-" || next === "_" ||
+        getUnicodeSimpleCategory(next.charCodeAt(0)) ===
+          UnicodeSimpleCategory.Letter
+      ) continue;
+    }
+
+    result.push([cardNumberBegin, cardNumberEnd]);
   }
 
   return result;
@@ -274,10 +333,70 @@ export function findCashtags(str: string) {
   return matchCashtags(str);
 }
 
+export function CHECK(condition: boolean) {
+  if (!condition) {
+    console.trace("check failed");
+  }
+}
+
+export function isValidBankCard(str: string) {
+  const MIN_CARD_LENGTH = 13;
+  const MAX_CARD_LENGTH = 19;
+  const digits = new Array<string>(MAX_CARD_LENGTH);
+  let digitCount = 0;
+  for (const char of str) {
+    CHECK(digitCount < MAX_CARD_LENGTH);
+    if (isDigit(char)) digits[digitCount++] = char;
+  }
+  CHECK(digitCount >= MIN_CARD_LENGTH);
+
+  let sum = 0;
+  for (let i = digitCount; i > 0; i--) {
+    const digit = digits[i - 1].charCodeAt(0) - "0".charCodeAt(0);
+    if ((digitCount - i) % 2 == 0) sum += digit;
+    else sum += digit < 5 ? 2 * digit : 2 * digit - 9;
+  }
+  if (sum % 10 != 0) return false;
+
+  const prefix1 = digits[0].charCodeAt(0) - "0".charCodeAt(0);
+  const prefix2 = prefix1 * 10 + (digits[1].charCodeAt(0) - "0".charCodeAt(0));
+  const prefix3 = prefix2 * 10 + (digits[2].charCodeAt(0) - "0".charCodeAt(0));
+  const prefix4 = prefix3 * 10 + (digits[3].charCodeAt(0) - "0".charCodeAt(0));
+  if (prefix1 == 4) {
+    // Visa
+    return digitCount == 13 || digitCount == 16 || digitCount == 18 ||
+      digitCount == 19;
+  }
+  if (
+    (51 <= prefix2 && prefix2 <= 55) || (2221 <= prefix4 && prefix4 <= 2720)
+  ) {
+    // mastercard
+    return digitCount == 16;
+  }
+  if (prefix2 == 34 || prefix2 == 37) {
+    // American Express
+    return digitCount == 15;
+  }
+  if (prefix2 == 62 || prefix2 == 81) {
+    // UnionPay
+    return digitCount >= 16;
+  }
+  if (2200 <= prefix4 && prefix4 <= 2204) {
+    // MIR
+    return digitCount == 16;
+  }
+  return true;
+}
+
+export function findBankCardNumbers(str: string) {
+  return matchBankCardNumbers(str).filter(([start, end]) => {
+    return isValidBankCard(str.substring(start, end));
+  });
+}
+
 export function findMediaTimestamps(str: string) {
   const result: [Position, number][] = [];
   for (const [start, end] of matchMediaTimestamps(str)) {
-    console.log([start, end], str.substring(start, end));
     const parts = str.substring(start, end).split(":");
     if (parts.length > 3 || parts[parts.length - 1].length != 2) continue;
     const seconds = parseInt(parts[parts.length - 1]);
