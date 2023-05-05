@@ -1,12 +1,13 @@
 import {
   getUnicodeSimpleCategory,
   isAlphaDigitOrUnderscore,
+  isDigit,
   isHashtagLetter,
   isWordCharacter,
   UnicodeSimpleCategory,
 } from "./utilities.ts";
 
-type Position = [number, number];
+export type Position = [number, number];
 
 export function matchMentions(str: string): Position[] {
   const result: Position[] = [];
@@ -185,6 +186,57 @@ export function matchCashtags(str: string): Position[] {
   return result;
 }
 
+export function matchMediaTimestamps(str: string) {
+  const result: Position[] = [];
+  const begin = 0, end = str.length;
+  let pos = begin;
+
+  while (pos < end) {
+    const colonSign = str.substring(pos).indexOf(":");
+    if (colonSign == -1) break;
+    pos += colonSign;
+
+    let mediaTimestampBegin = pos;
+    while (
+      (mediaTimestampBegin) != begin &&
+      (str[mediaTimestampBegin - 1] === ":" ||
+        isDigit(str[mediaTimestampBegin - 1]))
+    ) {
+      mediaTimestampBegin--;
+    }
+
+    let mediaTimestampEnd = pos;
+    while (
+      mediaTimestampEnd + 1 != end &&
+      (str[mediaTimestampEnd + 1] === ":" ||
+        isDigit(str[mediaTimestampEnd + 1]))
+    ) {
+      mediaTimestampEnd++;
+    }
+    mediaTimestampEnd++;
+
+    if (
+      mediaTimestampEnd != pos && mediaTimestampEnd != (pos + 1) &&
+      isDigit(str[pos + 1])
+    ) {
+      pos = mediaTimestampEnd;
+      if (mediaTimestampBegin != begin) {
+        const prev = str.charCodeAt(mediaTimestampBegin - 1);
+        if (isWordCharacter(prev)) continue;
+      }
+      if (mediaTimestampEnd != end) {
+        const next = str.charCodeAt(mediaTimestampEnd);
+        if (isWordCharacter(next)) continue;
+      }
+      result.push([mediaTimestampBegin, mediaTimestampEnd]);
+    } else {
+      pos = mediaTimestampEnd;
+    }
+  }
+
+  return result;
+}
+
 export function getValidShortUsernames() {
   return [
     "gif",
@@ -220,4 +272,31 @@ export function findHashtags(str: string) {
 
 export function findCashtags(str: string) {
   return matchCashtags(str);
+}
+
+export function findMediaTimestamps(str: string) {
+  const result: [Position, number][] = [];
+  for (const [start, end] of matchMediaTimestamps(str)) {
+    console.log([start, end], str.substring(start, end));
+    const parts = str.substring(start, end).split(":");
+    if (parts.length > 3 || parts[parts.length - 1].length != 2) continue;
+    const seconds = parseInt(parts[parts.length - 1]);
+    if (seconds >= 60) continue;
+    if (parts.length == 2) {
+      if (parts[0].length > 4 || parts[0].length == 0) continue;
+      const minutes = parseInt(parts[0]);
+      result.push([[start, end], minutes * 60 + seconds]);
+      continue;
+    } else {
+      if (
+        parts[0].length > 2 || parts[1].length > 2 ||
+        parts[0].length == 0 || parts[1].length == 0
+      ) continue;
+      const minutes = parseInt(parts[1]);
+      if (minutes >= 60) continue;
+      const hours = parseInt(parts[0]);
+      result.push([[start, end], hours * 3600 + minutes * 60 + seconds]);
+    }
+  }
+  return result;
 }

@@ -11,9 +11,12 @@ export function isWordCharacter(code: number) {
   }
 }
 
+export function isDigit(c: string) {
+  return "0" <= c && c <= "9";
+}
+
 export function isAlphaOrDigit(c: string) {
-  return ("0" <= c && c <= "9") || ("A" <= c && c <= "Z") ||
-    ("a" <= c && c <= "z");
+  return isDigit(c) || ("A" <= c && c <= "Z") || ("a" <= c && c <= "z");
 }
 
 export function isAlphaDigitOrUnderscore(c: string) {
