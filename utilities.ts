@@ -23,6 +23,10 @@ export function isAlphaDigitOrUnderscore(c: string) {
   return isAlphaOrDigit(c) || c === "_";
 }
 
+export function isAlphaDigitUnderscoreOrMinus(c: string) {
+  return isAlphaOrDigit(c) || c === "_" || c === "-";
+}
+
 export enum UnicodeSimpleCategory {
   Unknown,
   Letter,

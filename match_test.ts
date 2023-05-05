@@ -6,6 +6,7 @@ import {
   findHashtags,
   findMediaTimestamps,
   findMentions,
+  findTgURLs,
 } from "./match.ts";
 
 function checkFn(fn: (text: string) => [number, number][]) {
@@ -253,4 +254,53 @@ Deno.test("bank card numbers", () => {
   check("1234567890128/", ["1234567890128"]);
   check('"1234567890128', ["1234567890128"]);
   check("+1234567890128", []);
+});
+
+Deno.test("tg urls", () => {
+  const check = checkFn(findTgURLs);
+  check("", []);
+  check("tg://", []);
+  check("tg://a", ["tg://a"]);
+  check("a", []);
+  check("stg://a", ["tg://a"]);
+  check(
+    "asd  asdas das ton:asd tg:test ton://resolve tg://resolve TON://_-RESOLVE_- TG://-_RESOLVE-_",
+    ["ton://resolve", "tg://resolve", "TON://_-RESOLVE_-", "TG://-_RESOLVE-_"],
+  );
+  check("tg:test/", []);
+  check("tg:/test/", []);
+  check("tg://test/", ["tg://test/"]);
+  check("tg://test/?", ["tg://test/"]);
+  check("tg://test/#", ["tg://test/#"]);
+  check("tg://test?", ["tg://test"]);
+  check("tg://test#", ["tg://test"]);
+  check("tg://test/―asd―?asd=asd&asdas=―#――――", [
+    "tg://test/―asd―?asd=asd&asdas=―#――――",
+  ]);
+  check("tg://test/?asd", ["tg://test/?asd"]);
+  check("tg://test/?.:;,('?!`.:;,('?!`", ["tg://test/"]);
+  check("tg://test/#asdf", ["tg://test/#asdf"]);
+  check("tg://test?asdf", ["tg://test?asdf"]);
+  check("tg://test#asdf", ["tg://test#asdf"]);
+  check("tg://test?as‖df", ["tg://test?as"]);
+  check("tg://test?sa<df", ["tg://test?sa"]);
+  check("tg://test?as>df", ["tg://test?as"]);
+  check('tg://test?as"df', ["tg://test?as"]);
+  check("tg://test?as«df", ["tg://test?as"]);
+  check("tg://test?as»df", ["tg://test?as"]);
+  check("tg://test?as(df", ["tg://test?as(df"]);
+  check("tg://test?as)df", ["tg://test?as)df"]);
+  check("tg://test?as[df", ["tg://test?as[df"]);
+  check("tg://test?as]df", ["tg://test?as]df"]);
+  check("tg://test?as{df", ["tg://test?as{df"]);
+  check("tg://test?as'df", ["tg://test?as'df"]);
+  check("tg://test?as}df", ["tg://test?as}df"]);
+  check("tg://test?as$df", ["tg://test?as$df"]);
+  check("tg://test?as%df", ["tg://test?as%df"]);
+  check("tg://%30/sccct", []);
+  check("tg://test:asd@google.com:80", ["tg://test"]);
+  check("tg://google.com", ["tg://google"]);
+  check("tg://google/.com", ["tg://google/.com"]);
+  check("tg://127.0.0.1", ["tg://127"]);
+  check("tg://б.а.н.а.на", []);
 });

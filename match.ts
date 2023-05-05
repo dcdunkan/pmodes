@@ -1,6 +1,7 @@
 import {
   getUnicodeSimpleCategory,
   isAlphaDigitOrUnderscore,
+  isAlphaDigitUnderscoreOrMinus,
   isDigit,
   isHashtagLetter,
   isWordCharacter,
@@ -296,6 +297,93 @@ export function matchBankCardNumbers(str: string) {
   return result;
 }
 
+export function isURLUnicodeSymbol(c: number) {
+  if (0x2000 <= c && c <= 0x206f) { // General Punctuation
+    // Zero Width Non-Joiner/Joiner and various dashes
+    return c == 0x200c || c == 0x200d || (0x2010 <= c && c <= 0x2015);
+  }
+  return getUnicodeSimpleCategory(c) != UnicodeSimpleCategory.Separator;
+}
+
+export function isURLPathSymbol(c: number) {
+  switch (c) {
+    case "\n".charCodeAt(0):
+    case "<".charCodeAt(0):
+    case ">".charCodeAt(0):
+    case '"'.charCodeAt(0):
+    case 0xab:
+    case 0xbb:
+      return false;
+    default:
+      return isURLUnicodeSymbol(c);
+  }
+}
+
+export function matchTgURLs(str: string) {
+  const result: Position[] = [];
+  const begin = 0, end = str.length;
+  let pos = begin;
+  const badPathEndChars = [".", ":", ";", ",", "(", "'", "?", "!", "`"];
+
+  while (end - pos > 5) {
+    const colonSymbol = str.substring(pos).indexOf(":");
+    if (colonSymbol == -1) break;
+    pos += colonSymbol;
+
+    let urlBegin: number | undefined;
+    if (end - pos >= 3 && str[pos + 1] === "/" && str[pos + 2] === "/") {
+      if (
+        pos - begin >= 2 && str[pos - 2].toLowerCase() === "t" &&
+        str[pos - 1].toLowerCase() === "g"
+      ) {
+        urlBegin = pos - 2;
+      } else if (
+        pos - begin >= 3 && str[pos - 3].toLowerCase() === "t" &&
+          str[pos - 2].toLowerCase() === "o" ||
+        str[pos - 1].toLowerCase() === "n"
+      ) {
+        urlBegin = pos - 3;
+      }
+    }
+    if (urlBegin == null) {
+      ++pos;
+      continue;
+    }
+
+    pos += 3;
+    const domainBegin = pos;
+    while (
+      pos != end && pos - domainBegin != 253 &&
+      isAlphaDigitUnderscoreOrMinus(str[pos])
+    ) {
+      pos++;
+    }
+    if (pos == domainBegin) continue;
+
+    if (
+      pos != end && (str[pos] === "/" || str[pos] === "?" || str[pos] === "#")
+    ) {
+      let pathEndPos = pos + 1;
+      while (pathEndPos != end) {
+        const next = str.charCodeAt(pathEndPos);
+        if (!isURLPathSymbol(next)) break;
+        pathEndPos++;
+      }
+      while (
+        pathEndPos > pos + 1 &&
+        badPathEndChars.includes(str[pathEndPos - 1])
+      ) pathEndPos--;
+      if (str[pos] === "/" || pathEndPos > pos + 1) {
+        pos = pathEndPos;
+      }
+    }
+
+    result.push([urlBegin, pos]);
+  }
+
+  return result;
+}
+
 export function getValidShortUsernames() {
   return [
     "gif",
@@ -392,6 +480,10 @@ export function findBankCardNumbers(str: string) {
   return matchBankCardNumbers(str).filter(([start, end]) => {
     return isValidBankCard(str.substring(start, end));
   });
+}
+
+export function findTgURLs(str: string) {
+  return matchTgURLs(str);
 }
 
 export function findMediaTimestamps(str: string) {
