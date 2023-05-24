@@ -1,4 +1,4 @@
-import { getCategory } from "https://esm.sh/unicode-properties@1.4.1";
+import { getCategory } from "./vendor/esm.sh/unicode-properties@1.4.1.js";
 
 export function isWordCharacter(code: number) {
   switch (getUnicodeSimpleCategory(code)) {
@@ -11,12 +11,16 @@ export function isWordCharacter(code: number) {
   }
 }
 
+export function isAlpha(c: string) {
+  return ("A" <= c && c <= "Z") || ("a" <= c && c <= "z");
+}
+
 export function isDigit(c: string) {
   return "0" <= c && c <= "9";
 }
 
 export function isAlphaOrDigit(c: string) {
-  return isDigit(c) || ("A" <= c && c <= "Z") || ("a" <= c && c <= "z");
+  return isAlpha(c) || isDigit(c);
 }
 
 export function isAlphaDigitOrUnderscore(c: string) {
