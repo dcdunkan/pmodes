@@ -7,6 +7,8 @@ import {
   findMediaTimestamps,
   findMentions,
   findTgURLs,
+  // findURLs,
+  isEmailAddress,
 } from "./match.ts";
 
 function checkFn(fn: (text: string) => [number, number][]) {
@@ -304,3 +306,171 @@ Deno.test("tg urls", () => {
   check("tg://127.0.0.1", ["tg://127"]);
   check("tg://б.а.н.а.на", []);
 });
+
+Deno.test("email address", () => {
+  const check = (text: string, expected: boolean) => {
+    return assertEquals(isEmailAddress(text), expected);
+  };
+
+  check("telegram.org", false);
+  check("security@telegram.org", true);
+  check("security.telegram.org", false);
+  check("", false);
+  check("@", false);
+  check("A@a.a.a.ab", true);
+  check("A@a.ab", true);
+  check("Test@aa.aa.aa.aa", true);
+  check("Test@test.abd", true);
+  check("a@a.a.a.ab", true);
+  check("test@test.abd", true);
+  check("test@test.com", true);
+  check("test.abd", false);
+  check("a.ab", false);
+  check("a.bc@d.ef", true);
+
+  const badUserdatas = [
+    "",
+    "a.a.a.a.a.a.a.a.a.a.a.a",
+    "+.+.+.+.+.+",
+    "*.a.a",
+    "a.*.a",
+    "a.a.*",
+    "a.a.",
+    "a.a.abcdefghijklmnopqrstuvwxyz0123456789",
+    "a.abcdefghijklmnopqrstuvwxyz0.a",
+    "abcdefghijklmnopqrstuvwxyz0.a.a",
+  ];
+  const goodUserdatas = [
+    "a.a.a.a.a.a.a.a.a.a.a",
+    "a+a+a+a+a+a+a+a+a+a+a",
+    "+.+.+.+.+._",
+    "aozAQZ0-5-9_+-aozAQZ0-5-9_.aozAQZ0-5-9_.-._.+-",
+    "a.a.a",
+    "a.a.abcdefghijklmnopqrstuvwxyz012345678",
+    "a.abcdefghijklmnopqrstuvwxyz.a",
+    "a..a",
+    "abcdefghijklmnopqrstuvwxyz.a.a",
+    ".a.a",
+  ];
+  const badDomains = [
+    "",
+    ".",
+    "abc",
+    "localhost",
+    "a.a.a.a.a.a.a.ab",
+    ".......",
+    "a.a.a.a.a.a+ab",
+    "a+a.a.a.a.a.ab",
+    "a.a.a.a.a.a.a",
+    "a.a.a.a.a.a.abcdefghi",
+    "a.a.a.a.a.a.ab0yz",
+    "a.a.a.a.a.a.ab9yz",
+    "a.a.a.a.a.a.ab-yz",
+    "a.a.a.a.a.a.ab_yz",
+    "a.a.a.a.a.a.ab*yz",
+    ".ab",
+    ".a.ab",
+    "a..ab",
+    "a.a.a..a.ab",
+    ".a.a.a.a.ab",
+    "abcdefghijklmnopqrstuvwxyz01234.ab",
+    "ab0cd.abd.aA*sd.0.9.0-9.ABOYZ",
+    "ab*cd.abd.aAasd.0.9.0-9.ABOYZ",
+    "ab0cd.abd.aAasd.0.9.0*9.ABOYZ",
+    "*b0cd.ab_d.aA-sd.0.9.0-9.ABOYZ",
+    "ab0c*.ab_d.aA-sd.0.9.0-9.ABOYZ",
+    "ab0cd.ab_d.aA-sd.0.9.0-*.ABOYZ",
+    "ab0cd.ab_d.aA-sd.0.9.*-9.ABOYZ",
+    "-b0cd.ab_d.aA-sd.0.9.0-9.ABOYZ",
+    "ab0c-.ab_d.aA-sd.0.9.0-9.ABOYZ",
+    "ab0cd.ab_d.aA-sd.-.9.0-9.ABOYZ",
+    "ab0cd.ab_d.aA-sd.0.9.--9.ABOYZ",
+    "ab0cd.ab_d.aA-sd.0.9.0--.ABOYZ",
+    "_b0cd.ab_d.aA-sd.0.9.0-9.ABOYZ",
+    "ab0c_.ab_d.aA-sd.0.9.0-9.ABOYZ",
+    "ab0cd.ab_d.aA-sd._.9.0-9.ABOYZ",
+    "ab0cd.ab_d.aA-sd.0.9._-9.ABOYZ",
+    "ab0cd.ab_d.aA-sd.0.9.0-_.ABOYZ",
+    "-.ab_d.aA-sd.0.9.0-9.ABOYZ",
+    "ab0cd.ab_d.-.0.9.0-9.ABOYZ",
+    "ab0cd.ab_d.aA-sd.0.9.-.ABOYZ",
+    "_.ab_d.aA-sd.0.9.0-9.ABOYZ",
+    "ab0cd.ab_d._.0.9.0-9.ABOYZ",
+    "ab0cd.ab_d.aA-sd.0.9._.ABOYZ",
+  ];
+  const goodDomains = [
+    "a.a.a.a.a.a.ab",
+    "a.a.a.a.a.a.abcdef",
+    "a.a.a.a.a.a.aboyz",
+    "a.a.a.a.a.a.ABOYZ",
+    "a.a.a.a.a.a.AbOyZ",
+    "abcdefghijklmnopqrstuvwxyz0123.ab",
+    "ab0cd.ab_d.aA-sd.0.9.0-9.ABOYZ",
+    "A.Z.aA-sd.a.z.0-9.ABOYZ",
+  ];
+
+  for (const userdata of badUserdatas) {
+    for (const domain of badDomains) {
+      check(userdata + "@" + domain, false);
+      check(userdata + domain, false);
+    }
+    for (const domain of goodDomains) {
+      check(userdata + "@" + domain, false);
+      check(userdata + domain, false);
+    }
+  }
+  for (const userdata of goodUserdatas) {
+    for (const domain of badDomains) {
+      check(userdata + "@" + domain, false);
+      check(userdata + domain, false);
+    }
+    for (const domain of goodDomains) {
+      check(userdata + "@" + domain, true);
+      check(userdata + domain, false);
+    }
+  }
+});
+
+/* Deno.test("url", () => {
+  const check = (
+    str: string,
+    expectedUrls: string[],
+    expectedEmailAddresses: string[] = [],
+  ) => {
+    str.split("").map((r, u) => console.log({ r, u }))
+    const results = findURLs(str);
+    const resultUrls: string[] = [];
+    const resultEmailAddress: string[] = [];
+    for (const [[start, end], email] of results) {
+      if (!email) resultUrls.push(str.substring(start, end));
+      else resultEmailAddress.push(str.substring(start, end));
+    }
+    assertEquals(resultUrls, expectedUrls);
+    assertEquals(resultEmailAddress, expectedEmailAddresses);
+  };
+
+  check("telegram.org", ["telegram.org"]);
+  check("(telegram.org)", ["telegram.org"]);
+  check("\ntelegram.org)", ["telegram.org"]);
+  check(" telegram.org)", ["telegram.org"]);
+  check(".telegram.org)", []);
+  check("()telegram.org/?q=()", ["telegram.org/?q=()"]);
+  check('"telegram.org"', ["telegram.org"]);
+  check(" telegram. org. www. com... telegram.org... ...google.com...", [
+    "telegram.org",
+  ]);
+  check(" telegram.org ", ["telegram.org"]);
+  check("Такой сайт: http://www.google.com или такой telegram.org ", [
+    "http://www.google.com",
+    "telegram.org",
+  ]);
+  check(" telegram.org. ", ["telegram.org"]);
+  check("http://google,.com", []);
+  check("http://telegram.org/?asd=123#123.", [
+    "http://telegram.org/?asd=123#123",
+  ]);
+  check("[http://google.com](test)", ["http://google.com"]);
+  check("", []);
+  check(".", []);
+
+}); */
