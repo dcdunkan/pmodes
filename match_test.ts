@@ -7,6 +7,7 @@ import {
   findMediaTimestamps,
   findMentions,
   findTgURLs,
+  findURLs,
   // findURLs,
   isEmailAddress,
 } from "./match.ts";
@@ -431,13 +432,13 @@ Deno.test("email address", () => {
   }
 });
 
-/* Deno.test("url", () => {
+Deno.test("url", () => {
   const check = (
     str: string,
     expectedUrls: string[],
     expectedEmailAddresses: string[] = [],
   ) => {
-    str.split("").map((r, u) => console.log({ r, u }))
+    // str.split("").map((r, u) => console.log({ r, u ]););
     const results = findURLs(str);
     const resultUrls: string[] = [];
     const resultEmailAddress: string[] = [];
@@ -460,10 +461,10 @@ Deno.test("email address", () => {
     "telegram.org",
   ]);
   check(" telegram.org ", ["telegram.org"]);
-  check("Такой сайт: http://www.google.com или такой telegram.org ", [
-    "http://www.google.com",
-    "telegram.org",
-  ]);
+  check(
+    "Такой сайт: http://www.google.com или такой telegram.org ",
+    ["http://www.google.com", "telegram.org"],
+  );
   check(" telegram.org. ", ["telegram.org"]);
   check("http://google,.com", []);
   check("http://telegram.org/?asd=123#123.", [
@@ -473,4 +474,254 @@ Deno.test("email address", () => {
   check("", []);
   check(".", []);
 
-}); */
+  check("http://@google.com", []);
+  check("http://@goog.com", []);// TODO: server fix
+  check("http://@@google.com", []);
+  check("http://a@google.com", ["http://a@google.com"]);
+  check("http://test@google.com", ["http://test@google.com"]);
+  check("google.com:᪉᪉᪉᪉᪉", ["google.com"]);
+  check("https://telegram.org", ["https://telegram.org"]);
+  check("http://telegram.org", ["http://telegram.org"]);
+  check("ftp://telegram.org", ["ftp://telegram.org"]);
+  check("ftps://telegram.org", []);
+  check("sftp://telegram.org", []);
+  check("hTtPs://telegram.org", ["hTtPs://telegram.org"]);
+  check("HTTP://telegram.org", ["HTTP://telegram.org"]);
+  check("аHTTP://telegram.org", ["HTTP://telegram.org"]);
+  check("sHTTP://telegram.org", []);
+  check("://telegram.org", []);
+  check("google.com:᪀᪀", ["google.com"]);
+  check(
+    "http://" +
+      "abcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkab" +
+      "cdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcd" +
+      "efghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdef" +
+      "ghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefgh" +
+      "ijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghij" +
+      "kabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijka" +
+      "bcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabc" +
+      "defghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijkabcdefghijk.com",
+    [],
+  );
+  check("http://  .com", []);
+  check("URL:     .com", []);
+  check("URL: .com", []);
+  check(".com", []);
+  check("http://  .", []);
+  check("http://.", []);
+  check("http://.com", []);
+  check("http://  .", []);
+  check(",ahttp://google.com", ["http://google.com"]);
+  check(".ahttp://google.com", []);
+  check("http://1.0", []);
+  check("http://a.0", []);
+  check("http://a.a", []);
+  check("google.com:1#ab c", ["google.com:1#ab"]);
+  check("google.com:1#", ["google.com:1"]);
+  check("google.com:1#1", ["google.com:1#1"]);
+  check("google.com:00000001/abs", ["google.com:00000001/abs"]);
+  check("google.com:000000065535/abs", ["google.com:000000065535/abs"]);
+  check("google.com:000000065536/abs", ["google.com"]);
+  check("google.com:000000080/abs", ["google.com:000000080/abs"]);
+  check("google.com:0000000/abs", ["google.com"]);
+  check("google.com:0/abs", ["google.com"]);
+  check("google.com:/abs", ["google.com"]);
+  check("google.com:65535", ["google.com:65535"]);
+  check("google.com:65536", ["google.com"]);
+  check("google.com:99999", ["google.com"]);
+  check("google.com:100000", ["google.com"]);
+  check("127.001", []);
+  check("127.0.0.1", ["127.0.0.1"]);
+  check("127.0.0.01", []);
+  check("127.0.0.256", []);
+  check("127.0.0.300", []);
+  check("127.0.0.1000", []);
+  check("127.0.0.260", []);
+  check("1.0", []);
+  check("www.🤙.tk", ["www.🤙.tk"]);
+  check("a.ab", []);
+  check("test.abd", []);
+  check("ТеСт.Москва", []);
+  check("ТеСт.МоСкВΑ", []);
+  check("ТеСт.МоСкВа", ["ТеСт.МоСкВа"]);
+  check("ТеСт.МоСкВач", []);
+  check("http://ÀТеСт.МоСкВач", ["http://ÀТеСт.МоСкВач"]);
+  check("ÀÁ.com. ÀÁ.com.", ["ÀÁ.com", "ÀÁ.com"]);
+  check("ÀÁ.com,ÀÁ.com.", ["ÀÁ.com", "ÀÁ.com"]);
+  check("teiegram.org/test", []);
+  check("TeiegraM.org/test", []);
+  check("http://test.google.com/?q=abc()}[]def", [
+    "http://test.google.com/?q=abc()",
+  ]);
+  check("http://test.google.com/?q=abc([{)]}def", [
+    "http://test.google.com/?q=abc([{)]}def",
+  ]);
+  check("http://test.google.com/?q=abc(){}]def", [
+    "http://test.google.com/?q=abc(){}",
+  ]);
+  check("http://test.google.com/?q=abc){}[]def", [
+    "http://test.google.com/?q=abc",
+  ]);
+  check("http://test.google.com/?q=abc(){}[]def", [
+    "http://test.google.com/?q=abc(){}[]def",
+  ]);
+  check("http://test-.google.com", []);
+  check("http://test_.google.com", ["http://test_.google.com"]);
+  check("http://google_.com", []);
+  check("http://google._com_", []);
+  check("http://[2001:4860:0:2001::68]/", []);// TODO
+  check("tg://resolve", []);
+  check("test.abd", []);
+  check("/.b/..a    @.....@/. a.ba", ["a.ba"]);
+  check("bbbbbbbbbbbbbb.@.@", []);
+  check("http://google.com/", ["http://google.com/"]);
+  check("http://google.com?", ["http://google.com"]);
+  check("http://google.com#", ["http://google.com"]);
+  check("http://google.com##", ["http://google.com##"]);
+  check("http://google.com/?", ["http://google.com/"]);
+  check("https://www.google.com/ab,", ["https://www.google.com/ab"]);
+  check("@.", []);
+  check(
+    'a.b.google.com dfsknnfs gsdfgsg http://códuia.de/ dffdg," 12)(cpia.de/())(" http://гришка.рф/ sdufhdf ' +
+      "http://xn--80afpi2a3c.xn--p1ai/ I have a good time.Thanks, guys!\n\n(hdfughidufhgdis) go#ogle.com гришка.рф " +
+      "hsighsdf gi почта.рф\n\n✪df.ws/123      " +
+      "xn--80afpi2a3c.xn--p1ai\n\nhttp://foo.com/blah_blah\nhttp://foo.com/blah_blah/\n(Something like " +
+      "http://foo.com/blah_blah)\nhttp://foo.com/blah_blah_(wikipedi8989a_Вася)\n(Something like " +
+      "http://foo.com/blah_blah_(Стакан_007))\nhttp://foo.com/blah_blah.\nhttp://foo.com/blah_blah/.\n<http://foo.com/" +
+      "blah_blah>\n<http://fo@@@@@@@@@^%#*@^&@$#*@#%^*&!^#o.com/blah_blah/>\nhttp://foo.com/blah_blah,\nhttp://" +
+      "www.example.com/wpstyle/?p=364.\nhttp://✪df.ws/123\nrdar://1234\nrdar:/1234\nhttp://" +
+      "userid:password@example.com:8080\nhttp://userid@example.com\nhttp://userid@example.com:8080\nhttp://" +
+      "userid:password@example.com\nhttp://example.com:8080 " +
+      "x-yojimbo-item://6303E4C1-xxxx-45A6-AB9D-3A908F59AE0E\nmessage://" +
+      "%3c330e7f8409726r6a4ba78dkf1fd71420c1bf6ff@mail.gmail.com%3e\nhttp://➡️.ws/䨹\nwww.➡️.ws/" +
+      "䨹\n<tag>http://example.com</tag>\nJust a www.example.com " +
+      "link.\n\n➡️.ws/" +
+      "䨹\n\nabcdefghijklmnopqrstuvwxyz0123456789qwe_sdfsdf.aweawe-sdfs.com\nwww.🤙.tk:1\ngoogle.com:" +
+      "᪉᪉᪉᪉\ngoogle." +
+      "com:᪀᪀\nhttp://  .com\nURL:     .com\nURL: " +
+      ".com\n\ngoogle.com?qwe\ngoogle.com#qwe\ngoogle.com/?\ngoogle.com/#\ngoogle.com?\ngoogle.com#\n",
+    [
+      "a.b.google.com",
+      "http://códuia.de/",
+      "cpia.de/()",
+      "http://гришка.рф/",
+      "http://xn--80afpi2a3c.xn--p1ai/",
+      "гришка.рф",
+      "почта.рф",
+      "✪df.ws/123",
+      "xn--80afpi2a3c.xn--p1ai",
+      "http://foo.com/blah_blah",
+      "http://foo.com/blah_blah/",
+      "http://foo.com/blah_blah",
+      "http://foo.com/blah_blah_(wikipedi8989a_Вася)",
+      "http://foo.com/blah_blah_(Стакан_007)",
+      "http://foo.com/blah_blah",
+      "http://foo.com/blah_blah/",
+      "http://foo.com/blah_blah",
+      "http://foo.com/blah_blah",
+      "http://www.example.com/wpstyle/?p=364",
+      "http://✪df.ws/123",
+      "http://userid:password@example.com:8080",
+      "http://userid@example.com",
+      "http://userid@example.com:8080",
+      "http://userid:password@example.com",
+      "http://example.com:8080",
+      "http://➡️.ws/䨹",
+      "www.➡️.ws/䨹",
+      "http://example.com",
+      "www.example.com",
+      "➡️.ws/䨹",
+      "abcdefghijklmnopqrstuvwxyz0123456789qwe_sdfsdf.aweawe-sdfs.com",
+      "www.🤙.tk:1",
+      "google.com",
+      "google.com",
+      "google.com?qwe",
+      "google.com#qwe",
+      "google.com/",
+      "google.com/#",
+      "google.com",
+      "google.com",
+    ],
+  );
+  check("https://t.…", []);
+  check("('http://telegram.org/a-b/?br=ie&lang=en',)", [
+    "http://telegram.org/a-b/?br=ie&lang=en",
+  ]);
+  check("https://ai.telegram.org/bot%20bot/test-...", [
+    "https://ai.telegram.org/bot%20bot/test-",
+  ]);
+  check("a.bc@c.com", [], ["a.bc@c.com"]);
+  check("https://a.bc@c.com", ["https://a.bc@c.com"]);
+  check("https://a.de[bc@c.com", ["https://a.de"], ["bc@c.com"]);
+  check("https://a.de/bc@c.com", ["https://a.de/bc@c.com"]);
+  check("https://a.de]bc@c.com", ["https://a.de"], ["bc@c.com"]);
+  check("https://a.de{bc@c.com", ["https://a.de"], ["bc@c.com"]);
+  check("https://a.de}bc@c.com", ["https://a.de"], ["bc@c.com"]);
+  check("https://a.de(bc@c.com", ["https://a.de"], ["bc@c.com"]);
+  check("https://a.de)bc@c.com", ["https://a.de"], ["bc@c.com"]);
+  check("https://a.debc@c.com", ["https://a.debc@c.com"]);
+  check("https://a.de'bc@c.com", ["https://a.de"], ["bc@c.com"]);
+  check("https://a.de`bc@c.com", ["https://a.de"], ["bc@c.com"]);
+  check("https://a.bcde.fg@c.com", ["https://a.bcde.fg@c.com"]);
+  check("https://a:h.bcde.fg@c.com", ["https://a:h.bcde.fg@c.com"]);
+  check("https://abc@c.com", ["https://abc@c.com"]);
+  check("https://de[bc@c.com", [], ["bc@c.com"]);
+  check("https://de/bc@c.com", []);
+  check("https://de]bc@c.com", [], ["bc@c.com"]);
+  check("https://de{bc@c.com", [], ["bc@c.com"]);
+  check("https://de}bc@c.com", [], ["bc@c.com"]);
+  check("https://de(bc@c.com", [], ["bc@c.com"]);
+  check("https://de)bc@c.com", [], ["bc@c.com"]);
+  check("https://de\\bc@c.com", ["https://de\\bc@c.com"]);
+  check("https://de'bc@c.com", [], ["bc@c.com"]);
+  check("https://de`bc@c.com", [], ["bc@c.com"]);
+  check("https://bc:defg@c.com", ["https://bc:defg@c.com"]);
+  check("https://a:hbc:defg@c.com", ["https://a:hbc:defg@c.com"]);
+  check("https://a.bc@test.com:cd.com", ["https://a.bc@test.com", "cd.com"]);
+  check("telegram.Org", []);
+  check("telegram.ORG", ["telegram.ORG"]);
+  check("a.b.c.com.a.b.c", []);
+  check("File '/usr/views.py'", []);// TODO server fix
+  check("@views.py'", []);// TODO server fix
+  check("#views.py'", []);// TODO server fix
+  check("/views.py'", []);// TODO server fix
+  check(".views.py", []);
+  check("'views.py'", ["views.py"]);
+  check("bug.http://test.com/test/+#", []);// TODO {"http://test.com/test/+#"}
+  check("//AB.C.D.E.F.GH//", []);
+  check("<http://www.ics.uci.edu/pub/ietf/uri/historical.html#WARNING>", [
+    "http://www.ics.uci.edu/pub/ietf/uri/historical.html#WARNING",
+  ]);
+  check("Look :test@example.com", [":test@example.com"], []);// TODO {}, {"test@example.com"}
+  check("Look mailto:test@example.com", [], ["test@example.com"]);
+  check("http://test.com#a", ["http://test.com#a"]);
+  check("http://test.com#", ["http://test.com"]);
+  check("http://test.com?#", ["http://test.com?#"]);
+  check("http://test.com/?#", ["http://test.com/?#"]);
+  check("https://t.me/abcdef…", ["https://t.me/abcdef"]);
+  check("https://t.me…", ["https://t.me"]);
+  check("https://t.m…", []);
+  check("https://t.…", []);
+  check("https://t…", []);
+  check("👉http://ab.com/cdefgh-1IJ", ["http://ab.com/cdefgh-1IJ"]);
+  check("...👉http://ab.com/cdefgh-1IJ", []);// TODO
+  check(".?", []);
+  check("http://test―‑@―google―.―com―/―–―‐―/―/―/―?―‑―#―――", [
+    "http://test―‑@―google―.―com―/―–―‐―/―/―/―?―‑―#―――",
+  ]);
+  check("http://google.com/‖", ["http://google.com/"]);
+  check("a@b@c.com", [], []);
+  check("abc@c.com@d.com", []);
+  check("a@b.com:c@1", [], ["a@b.com"]);
+  check("test@test.software", [], ["test@test.software"]);
+  check("a:b?@gmail.com", []);
+  check("a?:b@gmail.com", []);
+  check("a#:b@gmail.com", []);
+  check("a:b#@gmail.com", []);
+  check("a!:b@gmail.com", ["a!:b@gmail.com"]);
+  check("a:b!@gmail.com", ["a:b!@gmail.com"]);
+  check("http://test_.com", []);
+  check("test_.com", []);
+  check("_test.com", []);
+  check("_.test.com", ["_.test.com"]);
+});
