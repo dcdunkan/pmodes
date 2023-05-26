@@ -24,7 +24,7 @@ export function matchMentions(str: string): Position[] {
     pos += atSymbol;
 
     // if the previous char is a blocking character:
-    if (pos != begin && isWordCharacter(str.charCodeAt(pos - 1))) {
+    if (pos != begin && isWordCharacter(str.codePointAt(pos - 1)!)) {
       pos++;
       continue;
     }
@@ -35,7 +35,7 @@ export function matchMentions(str: string): Position[] {
     const mentionEnd = pos;
     const size = mentionEnd - mentionBegin;
     if (size < 2 || size > 32) continue;
-    // if (isWordCharacter(str.charCodeAt(pos))) continue;
+    // if (isWordCharacter(str.codePointAt(pos)!)) continue;
     result.push([mentionBegin - 1, mentionEnd]);
   }
 
@@ -57,7 +57,7 @@ export function matchBotCommands(str: string): Position[] {
     if (pos != begin) {
       const prev = str[pos - 1];
       if (
-        isWordCharacter(prev.charCodeAt(0)) ||
+        isWordCharacter(prev.codePointAt(0)!) ||
         prev === "/" || prev === "<" || prev === ">" // apparently these too?
       ) {
         pos++;
@@ -118,7 +118,7 @@ export function matchHashtags(str: string): Position[] {
     pos += hashSymbol;
 
     if (pos != begin) {
-      const prev = str.charCodeAt(pos - 1);
+      const prev = str.codePointAt(pos - 1)!;
       category = getUnicodeSimpleCategory(prev);
       if (isHashtagLetter(prev)) {
         pos++;
@@ -131,8 +131,8 @@ export function matchHashtags(str: string): Position[] {
     let wasLetter = false;
 
     while (pos != end) {
-      category = getUnicodeSimpleCategory(str.charCodeAt(pos));
-      if (!isHashtagLetter(str.charCodeAt(pos))) break;
+      category = getUnicodeSimpleCategory(str.codePointAt(pos)!);
+      if (!isHashtagLetter(str.codePointAt(pos)!)) break;
       pos++;
       if (hashtagSize == 255) hashtagEnd = pos;
       if (hashtagSize != 256) {
@@ -161,7 +161,7 @@ export function matchCashtags(str: string): Position[] {
     if (dollarSymbol == -1) break;
     pos += dollarSymbol;
     if (pos != begin) {
-      const prev = str.charCodeAt(pos - 1);
+      const prev = str.codePointAt(pos - 1)!;
       if (isHashtagLetter(prev) || str[pos - 1] === "$") {
         pos++;
         continue;
@@ -180,7 +180,7 @@ export function matchCashtags(str: string): Position[] {
     const cashtagSize = cashtagEnd - cashtagBegin;
     if (cashtagSize < 1 || cashtagSize > 8) continue;
     if (cashtagEnd != end) {
-      const next = str.charCodeAt(pos);
+      const next = str.codePointAt(pos)!;
       if (isHashtagLetter(next) || str[pos] === "$") continue;
     }
     result.push([cashtagBegin - 1, cashtagEnd]);
@@ -224,11 +224,11 @@ export function matchMediaTimestamps(str: string) {
     ) {
       pos = mediaTimestampEnd;
       if (mediaTimestampBegin != begin) {
-        const prev = str.charCodeAt(mediaTimestampBegin - 1);
+        const prev = str.codePointAt(mediaTimestampBegin - 1)!;
         if (isWordCharacter(prev)) continue;
       }
       if (mediaTimestampEnd != end) {
-        const next = str.charCodeAt(mediaTimestampEnd);
+        const next = str.codePointAt(mediaTimestampEnd)!;
         if (isWordCharacter(next)) continue;
       }
       result.push([mediaTimestampBegin, mediaTimestampEnd]);
@@ -253,7 +253,7 @@ export function matchBankCardNumbers(str: string) {
       if (
         prev === "." || prev === "," || prev === "+" ||
         prev === "-" || prev === "_" ||
-        getUnicodeSimpleCategory(prev.charCodeAt(0)) ===
+        getUnicodeSimpleCategory(prev.codePointAt(0)!) ===
           UnicodeSimpleCategory.Letter
       ) {
         while (
@@ -288,7 +288,7 @@ export function matchBankCardNumbers(str: string) {
       const next = str[cardNumberEnd];
       if (
         next === "-" || next === "_" ||
-        getUnicodeSimpleCategory(next.charCodeAt(0)) ===
+        getUnicodeSimpleCategory(next.codePointAt(0)!) ===
           UnicodeSimpleCategory.Letter
       ) continue;
     }
@@ -309,10 +309,10 @@ export function isURLUnicodeSymbol(c: number) {
 
 export function isURLPathSymbol(c: number) {
   switch (c) {
-    case "\n".charCodeAt(0):
-    case "<".charCodeAt(0):
-    case ">".charCodeAt(0):
-    case '"'.charCodeAt(0):
+    case "\n".codePointAt(0)!:
+    case "<".codePointAt(0)!:
+    case ">".codePointAt(0)!:
+    case '"'.codePointAt(0)!:
     case 0xab:
     case 0xbb:
       return false;
@@ -367,7 +367,7 @@ export function matchTgURLs(str: string) {
     ) {
       let pathEndPos = pos + 1;
       while (pathEndPos != end) {
-        const next = str.charCodeAt(pathEndPos);
+        const next = str.codePointAt(pathEndPos)!;
         if (!isURLPathSymbol(next)) break;
         pathEndPos++;
       }
@@ -402,7 +402,7 @@ export function matchURLs(str: string) {
   function isProtocolSymbol(c: number) {
     if (c < 0x80) {
       return isAlphaOrDigit(String.fromCharCode(c)) ||
-        c == "+".charCodeAt(0) || c == "-".charCodeAt(0);
+        c == "+".codePointAt(0)! || c == "-".charCodeAt(0);
     }
     return getUnicodeSimpleCategory(c) !== UnicodeSimpleCategory.Separator;
   }
@@ -458,7 +458,7 @@ export function matchURLs(str: string) {
     while (domainBeginPos != begin) {
       domainBeginPos--;
       const nextPos = domainBeginPos + 1;
-      const code = str.charCodeAt(domainBeginPos);
+      const code = str.codePointAt(domainBeginPos)!;
       if (!isDomainSymbol(code)) {
         domainBeginPos = nextPos;
         break;
@@ -469,7 +469,7 @@ export function matchURLs(str: string) {
     let domainEndPos = begin + dotPos;
     while (domainEndPos != end) {
       const nextPos = domainEndPos + 1;
-      const code = str.charCodeAt(domainEndPos);
+      const code = str.codePointAt(domainEndPos)!;
       console.log(code, str[domainEndPos]);
       if (str[domainEndPos] === "@") {
         lastAtPos = domainEndPos;
@@ -483,7 +483,7 @@ export function matchURLs(str: string) {
       while (domainBeginPos != begin) {
         domainBeginPos--;
         const nextPos = domainBeginPos + 1;
-        const code = str.charCodeAt(domainBeginPos);
+        const code = str.codePointAt(domainBeginPos)!;
         if (!isUserDataSymbol(code)) {
           domainBeginPos = nextPos;
           break;
@@ -520,7 +520,7 @@ export function matchURLs(str: string) {
       let pathEndPos = urlEndPos + 1;
       while (pathEndPos != end) {
         const nextPos = pathEndPos + 1;
-        const code = str.charCodeAt(pathEndPos);
+        const code = str.codePointAt(pathEndPos)!;
         if (!isURLPathSymbol(code)) break;
         pathEndPos = nextPos;
       }
@@ -548,7 +548,7 @@ export function matchURLs(str: string) {
       while (userDataBeginPos != begin) {
         userDataBeginPos--;
         const nextPos = userDataBeginPos + 1;
-        const code = str.charCodeAt(userDataBeginPos);
+        const code = str.codePointAt(userDataBeginPos)!;
         if (!isUserDataSymbol(code)) {
           userDataBeginPos = nextPos;
           break;
@@ -567,7 +567,7 @@ export function matchURLs(str: string) {
         while (protocolBeginPos != begin) {
           protocolBeginPos--;
           const nextPos = protocolBeginPos + 1;
-          const code = str.charCodeAt(protocolBeginPos);
+          const code = str.codePointAt(protocolBeginPos)!;
           if (!isProtocolSymbol(code)) {
             protocolBeginPos = nextPos;
             break;
@@ -590,7 +590,7 @@ export function matchURLs(str: string) {
       } else {
         const prefixEnd = prefix.length - 1;
         // const prefixBack = prefixEnd - 1;
-        const code = str.charCodeAt(prefixEnd);
+        const code = str.codePointAt(prefixEnd)!;
         const char = String.fromCharCode(code);
         if (
           isWordCharacter(code) || char == "/" || char == "#" || char === "@"
@@ -682,16 +682,16 @@ export function isValidBankCard(str: string) {
 
   let sum = 0;
   for (let i = digitCount; i > 0; i--) {
-    const digit = digits[i - 1].charCodeAt(0) - "0".charCodeAt(0);
+    const digit = digits[i - 1].codePointAt(0)! - "0".charCodeAt(0);
     if ((digitCount - i) % 2 == 0) sum += digit;
     else sum += digit < 5 ? 2 * digit : 2 * digit - 9;
   }
   if (sum % 10 != 0) return false;
 
-  const prefix1 = digits[0].charCodeAt(0) - "0".charCodeAt(0);
-  const prefix2 = prefix1 * 10 + (digits[1].charCodeAt(0) - "0".charCodeAt(0));
-  const prefix3 = prefix2 * 10 + (digits[2].charCodeAt(0) - "0".charCodeAt(0));
-  const prefix4 = prefix3 * 10 + (digits[3].charCodeAt(0) - "0".charCodeAt(0));
+  const prefix1 = digits[0].codePointAt(0)! - "0".charCodeAt(0);
+  const prefix2 = prefix1 * 10 + (digits[1].codePointAt(0)! - "0".charCodeAt(0));
+  const prefix3 = prefix2 * 10 + (digits[2].codePointAt(0)! - "0".charCodeAt(0));
+  const prefix4 = prefix3 * 10 + (digits[3].codePointAt(0)! - "0".charCodeAt(0));
   if (prefix1 == 4) {
     // Visa
     return digitCount == 13 || digitCount == 16 || digitCount == 18 ||

@@ -7,7 +7,7 @@ export function isWordCharacter(code: number) {
     case UnicodeSimpleCategory.Number:
       return true;
     default:
-      return code == "_".charCodeAt(0);
+      return code == "_".codePointAt(0);
   }
 }
 
@@ -52,7 +52,7 @@ export function getUnicodeSimpleCategory(
 
 export function isHashtagLetter(codepoint: number): boolean {
   if (
-    codepoint == "_".charCodeAt(0) || codepoint == 0x200c ||
+    codepoint == "_".codePointAt(0) || codepoint == 0x200c ||
     codepoint == 0xb7 || (0xd80 <= codepoint && codepoint <= 0xdff)
   ) {
     return true;
