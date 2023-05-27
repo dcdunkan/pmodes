@@ -475,7 +475,7 @@ Deno.test("url", () => {
   check(".", []);
 
   check("http://@google.com", []);
-  check("http://@goog.com", []);// TODO: server fix
+  check("http://@goog.com", []); // TODO: server fix
   check("http://@@google.com", []);
   check("http://a@google.com", ["http://a@google.com"]);
   check("http://test@google.com", ["http://test@google.com"]);
@@ -569,7 +569,7 @@ Deno.test("url", () => {
   check("http://test_.google.com", ["http://test_.google.com"]);
   check("http://google_.com", []);
   check("http://google._com_", []);
-  check("http://[2001:4860:0:2001::68]/", []);// TODO
+  check("http://[2001:4860:0:2001::68]/", []); // TODO
   check("tg://resolve", []);
   check("test.abd", []);
   check("/.b/..a    @.....@/. a.ba", ["a.ba"]);
@@ -681,18 +681,18 @@ Deno.test("url", () => {
   check("telegram.Org", []);
   check("telegram.ORG", ["telegram.ORG"]);
   check("a.b.c.com.a.b.c", []);
-  check("File '/usr/views.py'", []);// TODO server fix
-  check("@views.py'", []);// TODO server fix
-  check("#views.py'", []);// TODO server fix
-  check("/views.py'", []);// TODO server fix
+  check("File '/usr/views.py'", []); // TODO server fix
+  check("@views.py'", []); // TODO server fix
+  check("#views.py'", []); // TODO server fix
+  check("/views.py'", []); // TODO server fix
   check(".views.py", []);
   check("'views.py'", ["views.py"]);
-  check("bug.http://test.com/test/+#", []);// TODO {"http://test.com/test/+#"}
+  check("bug.http://test.com/test/+#", []); // TODO {"http://test.com/test/+#"}
   check("//AB.C.D.E.F.GH//", []);
   check("<http://www.ics.uci.edu/pub/ietf/uri/historical.html#WARNING>", [
     "http://www.ics.uci.edu/pub/ietf/uri/historical.html#WARNING",
   ]);
-  check("Look :test@example.com", [":test@example.com"], []);// TODO {}, {"test@example.com"}
+  check("Look :test@example.com", [":test@example.com"], []); // TODO {}, {"test@example.com"}
   check("Look mailto:test@example.com", [], ["test@example.com"]);
   check("http://test.com#a", ["http://test.com#a"]);
   check("http://test.com#", ["http://test.com"]);
@@ -704,7 +704,7 @@ Deno.test("url", () => {
   check("https://t.…", []);
   check("https://t…", []);
   check("👉http://ab.com/cdefgh-1IJ", ["http://ab.com/cdefgh-1IJ"]);
-  check("...👉http://ab.com/cdefgh-1IJ", []);// TODO
+  check("...👉http://ab.com/cdefgh-1IJ", []); // TODO
   check(".?", []);
   check("http://test―‑@―google―.―com―/―–―‐―/―/―/―?―‑―#―――", [
     "http://test―‑@―google―.―com―/―–―‐―/―/―/―?―‑―#―――",
