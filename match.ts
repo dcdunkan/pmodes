@@ -386,14 +386,6 @@ export function matchTgURLs(str: string) {
   return result;
 }
 
-function isDomainSymbol(c: number) {
-  if (c >= 0xc0) return isURLUnicodeSymbol(c);
-  const char = String.fromCharCode(c);
-  return char === "." || char === "~" || isAlphaDigitUnderscoreOrMinus(char);
-}
-
-console.log(isDomainSymbol(1052));
-
 export function matchURLs(str: string) {
   const result: Position[] = [];
   const begin = 0;
@@ -402,7 +394,7 @@ export function matchURLs(str: string) {
   function isProtocolSymbol(c: number) {
     if (c < 0x80) {
       return isAlphaOrDigit(String.fromCharCode(c)) ||
-        c == "+".codePointAt(0)! || c == "-".charCodeAt(0);
+        c == "+".codePointAt(0)! || c == "-".codePointAt(0)!;
     }
     return getUnicodeSimpleCategory(c) !== UnicodeSimpleCategory.Separator;
   }
@@ -432,9 +424,12 @@ export function matchURLs(str: string) {
   }
 
   function isDomainSymbol(c: number) {
-    if (c >= 0xc0) return isURLUnicodeSymbol(c);
-    const char = String.fromCharCode(c);
-    return char === "." || char === "~" || isAlphaDigitUnderscoreOrMinus(char);
+    if (c < 0xc0) {
+      const char = String.fromCharCode(c);
+      return char === "." ||
+        isAlphaDigitUnderscoreOrMinus(char) || char === "~";
+    }
+    return isURLUnicodeSymbol(c);
   }
 
   const badPathEndChars = [".", ":", ";", ",", "(", "'", "?", "!", "`"];
@@ -470,7 +465,7 @@ export function matchURLs(str: string) {
     while (domainEndPos != end) {
       const nextPos = domainEndPos + 1;
       const code = str.codePointAt(domainEndPos)!;
-      console.log(code, str[domainEndPos]);
+      console.log({ code, char: str[domainEndPos] });
       if (str[domainEndPos] === "@") {
         lastAtPos = domainEndPos;
       } else if (!isDomainSymbol(code)) {
@@ -602,7 +597,9 @@ export function matchURLs(str: string) {
 
     if (!isBad) {
       if (urlEndPos > begin + dotPos + 1) {
-        console.log({ url: str.substring(done + urlBeginPos, done + urlEndPos) });
+        console.log({
+          url: str.substring(done + urlBeginPos, done + urlEndPos),
+        });
         result.push([done + urlBeginPos, done + urlEndPos]);
       }
       while (urlEndPos != end && str[urlEndPos] === ".") {
@@ -620,7 +617,7 @@ export function matchURLs(str: string) {
 
     str = str.substring(urlEndPos - begin);
     done += urlEndPos - begin;
-    end = urlEndPos;
+    end = str.length;
   }
 
   return result;
@@ -682,16 +679,19 @@ export function isValidBankCard(str: string) {
 
   let sum = 0;
   for (let i = digitCount; i > 0; i--) {
-    const digit = digits[i - 1].codePointAt(0)! - "0".charCodeAt(0);
+    const digit = digits[i - 1].codePointAt(0)! - "0".codePointAt(0)!;
     if ((digitCount - i) % 2 == 0) sum += digit;
     else sum += digit < 5 ? 2 * digit : 2 * digit - 9;
   }
   if (sum % 10 != 0) return false;
 
-  const prefix1 = digits[0].codePointAt(0)! - "0".charCodeAt(0);
-  const prefix2 = prefix1 * 10 + (digits[1].codePointAt(0)! - "0".charCodeAt(0));
-  const prefix3 = prefix2 * 10 + (digits[2].codePointAt(0)! - "0".charCodeAt(0));
-  const prefix4 = prefix3 * 10 + (digits[3].codePointAt(0)! - "0".charCodeAt(0));
+  const prefix1 = digits[0].codePointAt(0)! - "0".codePointAt(0)!;
+  const prefix2 = prefix1 * 10 +
+    (digits[1].codePointAt(0)! - "0".codePointAt(0)!);
+  const prefix3 = prefix2 * 10 +
+    (digits[2].codePointAt(0)! - "0".codePointAt(0)!);
+  const prefix4 = prefix3 * 10 +
+    (digits[3].codePointAt(0)! - "0".codePointAt(0)!);
   if (prefix1 == 4) {
     // Visa
     return digitCount == 13 || digitCount == 16 || digitCount == 18 ||

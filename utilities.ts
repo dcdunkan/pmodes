@@ -1,4 +1,7 @@
 import { getCategory } from "./vendor/esm.sh/unicode-properties@1.4.1.js";
+// import { getUnicodeSimpleCategory } from "./unicode.ts";
+
+// export { getUnicodeSimpleCategory };
 
 export function isWordCharacter(code: number) {
   switch (getUnicodeSimpleCategory(code)) {
