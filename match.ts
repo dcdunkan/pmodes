@@ -299,25 +299,15 @@ export function matchBankCardNumbers(str: string) {
   return result;
 }
 
-const cat = ["unknown", "letter", "decimalnumber", "number", "separator"];
-
 export function isURLUnicodeSymbol(c: number) {
   if (0x2000 <= c && c <= 0x206f) { // General Punctuation
     // Zero Width Non-Joiner/Joiner and various dashes
     return c == 0x200c || c == 0x200d || (0x2010 <= c && c <= 0x2015);
   }
-
-  console.log("isURLUnicodeSymbol was called", {
-    codepoint: c,
-    character: String.fromCodePoint(c),
-    category: getUnicodeSimpleCategory(c),
-    cat: cat[getUnicodeSimpleCategory(c)],
-  });
   return getUnicodeSimpleCategory(c) != UnicodeSimpleCategory.Separator;
 }
 
 export function isURLPathSymbol(c: number) {
-  console.log("isURLPathSymbol was called", c);
   switch (c) {
     case "\n".codePointAt(0)!:
     case "<".codePointAt(0)!:
@@ -396,20 +386,12 @@ export function matchTgURLs(str: string) {
   return result;
 }
 
-const d = console.debug;
-
 export function matchURLs(str: string) {
-  d("\n\n==============================================\n");
-  d("Trying to match URLs from the string:");
-  d({ str }, "\n", "length:", str.length);
-  str.split("").map((e, i) => d({ i, char: e }));
-
   const result: Position[] = [];
   const begin = 0;
   let end = str.length;
 
   function isProtocolSymbol(c: number) {
-    d("isProtocolSymbol was called", c);
     if (c < 0x80) {
       return isAlphaOrDigit(String.fromCodePoint(c)) ||
         c == "+".codePointAt(0)! || c == "-".codePointAt(0)!;
@@ -418,7 +400,6 @@ export function matchURLs(str: string) {
   }
 
   function isUserDataSymbol(c: number) {
-    d("isUserDataSymbol was called", c);
     switch (String.fromCodePoint(c)) {
       case "\n":
       case "/":
@@ -443,7 +424,6 @@ export function matchURLs(str: string) {
   }
 
   function isDomainSymbol(c: number) {
-    d("isDomainSymbol", { c });
     if (c < 0xc0) {
       const char = String.fromCodePoint(c);
       return char === "." ||
@@ -456,21 +436,12 @@ export function matchURLs(str: string) {
 
   let done = 0;
 
-  let loopCount = 0;
-
   while (true) {
-    d("Entering the loop for the", ++loopCount, "time");
-    d("So far we have", loopCount - 1, "URLs in the string");
-    d("The string currently is:\n", { str }, "\nLength:", str.length);
-
     const dotPos = str.indexOf(".");
-    d("dot was found at", dotPos);
-
     if (dotPos == -1) break;
     if (dotPos > str.length || dotPos + 1 == str.length) break;
 
     if (str[dotPos + 1] == " ") {
-      d("Seems like a new sentence, so trimming and continuing");
       str = str.substring(dotPos + 2);
       done += dotPos + 2;
       end = str.length;
@@ -478,66 +449,43 @@ export function matchURLs(str: string) {
     }
 
     let domainBeginPos = begin + dotPos;
-    d("Entering the domainBegin loop");
-    d({ domainBeginPos });
     while (domainBeginPos != begin) {
-      d({ domainBeginPos });
       domainBeginPos--;
       const nextPos = domainBeginPos + 1;
       const code = str.codePointAt(domainBeginPos)!;
-      d({ code, char: str[domainBeginPos] });
       if (!isDomainSymbol(code)) {
-        d("Doesn't seem like a domain symbol, breaking", code);
         domainBeginPos = nextPos;
         break;
       }
     }
-    d({ domainBeginPos });
-    d("Finished the domainbegin loop");
 
     let lastAtPos: number | undefined = undefined;
     let domainEndPos = begin + dotPos;
-    d("Entering the domainend loop");
-    d({ domainEndPos });
     while (domainEndPos != end) {
-      d({ domainEndPos });
       const nextPos = domainEndPos + 1;
       const code = str.codePointAt(domainEndPos)!;
-      d({ code, char: str[domainEndPos] });
       if (str[domainEndPos] === "@") {
         lastAtPos = domainEndPos;
-        d("Found an @:", { lastAtPos });
       } else if (!isDomainSymbol(code)) {
-        d("Doesn't seem like a domain symbol, breaking", code);
         break;
       }
       domainEndPos = nextPos;
     }
-    d({ domainEndPos });
-    d("Finished the domainend loop");
 
     if (lastAtPos != null) {
-      d("Seems like there's an @: Entering the loop");
       while (domainBeginPos != begin) {
-        d({ domainBeginPos });
         domainBeginPos--;
         const nextPos = domainBeginPos + 1;
         const code = str.codePointAt(domainBeginPos)!;
-        d({ code, char: str[domainBeginPos] });
         if (!isUserDataSymbol(code)) {
-          d("Doesn't seem like a user data symbol", code);
           domainBeginPos = nextPos;
           break;
         }
       }
-      d({ domainBeginPos });
-      d("Finished the loop");
     }
 
     let urlEndPos = domainEndPos;
-    d("Setting", { urlEndPos });
 
-    d("Checking for port");
     if (urlEndPos != end && str[urlEndPos] === ":") {
       let portEndPos = urlEndPos + 1;
       while (portEndPos != end && isDigit(str[portEndPos])) {
@@ -557,18 +505,13 @@ export function matchURLs(str: string) {
       }
     }
 
-    d("Done checking for port");
-
-    d("Path search started");
     if (
       urlEndPos != end &&
       (str[urlEndPos] === "/" || str[urlEndPos] === "?" ||
         str[urlEndPos] === "#")
     ) {
       let pathEndPos = urlEndPos + 1;
-      d({ pathEndPos });
       while (pathEndPos != end) {
-        d({ pathEndPos });
         const nextPos = pathEndPos + 1;
         const code = str.codePointAt(pathEndPos)!;
         if (!isURLPathSymbol(code)) {
@@ -576,35 +519,24 @@ export function matchURLs(str: string) {
         }
         pathEndPos = nextPos;
       }
-      d({ pathEndPos });
-      d("next loop");
       while (
         pathEndPos > urlEndPos + 1 &&
         badPathEndChars.includes(str[pathEndPos - 1])
       ) {
         pathEndPos--;
       }
-      d("modified:", { pathEndPos });
       if (str[urlEndPos] === "/" || pathEndPos > urlEndPos + 1) {
-        d("modified inside the if", { urlEndPos });
         urlEndPos = pathEndPos;
       }
     }
 
-    d("Path search ended");
-
-    d("Modifying", { urlEndPos });
     while (urlEndPos > begin + dotPos + 1 && str[urlEndPos - 1] === ".") {
       urlEndPos--;
     }
-    d("Done Modifying", { urlEndPos });
 
     let isBad = false;
     let urlBeginPos = domainBeginPos;
 
-    d({ urlBeginPos });
-
-    d("User data check");
     if (urlBeginPos != begin && str[urlBeginPos - 1] === "@") {
       if (lastAtPos != null) isBad = true;
       let userDataBeginPos = urlBeginPos - 1;
@@ -623,11 +555,7 @@ export function matchURLs(str: string) {
       urlBeginPos = userDataBeginPos;
     }
 
-    d("DONE User data check");
-    d({ urlBeginPos });
-
     if (urlBeginPos != begin) {
-      console.log("Checking for protocols");
       const prefix = str.substring(begin, urlBeginPos);
       if (prefix.length >= 6 && prefix.endsWith("://")) {
         let protocolBeginPos = urlBeginPos - 3;
@@ -669,8 +597,6 @@ export function matchURLs(str: string) {
 
     if (!isBad) {
       if (urlEndPos > begin + dotPos + 1) {
-        d("Pushing the URL:");
-        d({ url: str.substring(done + urlBeginPos, done + urlEndPos) });
         result.push([done + urlBeginPos, done + urlEndPos]);
       }
       while (urlEndPos != end && str[urlEndPos] === ".") {
@@ -689,7 +615,6 @@ export function matchURLs(str: string) {
     str = str.substring(urlEndPos - begin);
     done += urlEndPos - begin;
     end = str.length;
-    d("Iteration DONE");
   }
 
   return result;
@@ -1011,23 +936,19 @@ export function isCommonTLD(str: string) {
       break;
     }
   }
-  console.log({ isLower });
   if (isLower) {
     // fast path
     return tlds.includes(str);
   }
 
-  const strLower = str.toLowerCase(); // Only God knows if this works or not.
-  d({ strLower, str });
+  const strLower = str.toLowerCase();
   if (strLower !== str && strLower.substring(1) === str.substring(1)) {
-    console.log("MOOOOOOOOOO");
     return false;
   }
   return tlds.includes(strLower);
 }
 
 export function fixURL(str: string) {
-  d("FIXING", { str });
   let fullUrl = str;
 
   let hasProtocol = false;
@@ -1038,7 +959,6 @@ export function fixURL(str: string) {
   ) {
     const pos = str.indexOf(":");
     str = str.substring(pos + 3);
-    d({ str });
     hasProtocol = true;
   }
 
@@ -1052,23 +972,18 @@ export function fixURL(str: string) {
     maxNegativeOne(str.indexOf("?")),
     maxNegativeOne(str.indexOf("#")),
   );
-  d({ domainEnd });
   let domain = str.substring(0, domainEnd);
-  d({ domain });
   const path = str.substring(domainEnd);
-  d({ path });
 
   const atPos = domain.indexOf("@");
   if (atPos < domain.length) {
     domain = domain.substring(atPos + 1);
   }
-  d({ domain });
   const lastIndexOfColon = domain.lastIndexOf(":");
   domain = domain.substring(
     0,
     lastIndexOfColon == -1 ? undefined : lastIndexOfColon,
   );
-  d({ domain });
 
   if (domain.length == 12 && (domain[0] === "t" || domain[0] === "T")) {
     if (domain.toLowerCase() === "teiegram.org") return "";
@@ -1100,17 +1015,14 @@ export function fixURL(str: string) {
     if (balance[0] < 0 || balance[1] < 0 || balance[2] < 0) break;
   }
 
-  d({ pathPos });
   const badPathEndChars = [".", ":", ";", ",", "(", "'", "?", "!", "`"];
   while (pathPos > 0 && badPathEndChars.includes(path[pathPos - 1])) {
     pathPos--;
   }
-  d({ pathPos });
   fullUrl = fullUrl.substring(
     0,
     fullUrl.length - (path.length - pathPos), // > 0 ? (path.length - pathPos) : undefined,
   );
-  d({ fullUrl });
 
   let prev = 0;
   let domainPartCount = 0;
@@ -1147,7 +1059,6 @@ export function fixURL(str: string) {
   if (!hasNonDigit) return "";
 
   const tld = domain.substring(prev);
-  d({ tld });
   if (tld.length <= 1) return "";
 
   if (tld.startsWith("xn--")) {
@@ -1158,7 +1069,6 @@ export function fixURL(str: string) {
   } else {
     if (tld.indexOf("_") != -1) return "";
     if (tld.indexOf("-") != -1) return "";
-    d({ hasProtocol, isCommonTLD: isCommonTLD(tld) });
     if (!hasProtocol && !isCommonTLD(tld)) return "";
   }
 
@@ -1181,9 +1091,7 @@ export function findURLs(str: string) {
     } else if (url.startsWith("mailto:") && isEmailAddress(url.substring(7))) {
       result.push([[s + 7, s + url.length], true]);
     } else {
-      d("GOT", { url });
       url = fixURL(url);
-      d("FIXED", { url });
       if (url.length != 0) {
         result.push([[s, s + url.length], false]);
       }
