@@ -18,24 +18,22 @@ export function matchMentions(str: string): Position[] {
   let pos = begin;
 
   while (pos < end) {
-    // check the rest of the str for '@'
     const atSymbol = str.substring(pos).indexOf("@");
-    if (atSymbol == -1) break; // no more possible mentions found.
+    if (atSymbol == -1) break;
     pos += atSymbol;
 
-    // if the previous char is a blocking character:
     if (pos != begin && isWordCharacter(str.codePointAt(pos - 1)!)) {
       pos++;
       continue;
     }
-    const mentionBegin = ++pos; // starts without the '@'
+    const mentionBegin = ++pos;
     while (pos != end && isAlphaDigitOrUnderscore(str[pos])) {
-      pos++; // incr. if the character is okay
+      pos++;
     }
     const mentionEnd = pos;
     const size = mentionEnd - mentionBegin;
     if (size < 2 || size > 32) continue;
-    // if (isWordCharacter(str.codePointAt(pos)!)) continue;
+    if (isWordCharacter(str.codePointAt(pos)!)) continue;
     result.push([mentionBegin - 1, mentionEnd]);
   }
 
@@ -48,26 +46,24 @@ export function matchBotCommands(str: string): Position[] {
   let pos = begin;
 
   while (pos < end) {
-    // check the rest of the str for possible commands.
     const slashSymbol = str.substring(pos).indexOf("/");
-    if (slashSymbol == -1) break; // no possible commands.
+    if (slashSymbol == -1) break;
     pos += slashSymbol;
 
-    // check if the prev character is okay
     if (pos != begin) {
       const prev = str[pos - 1];
       if (
         isWordCharacter(prev.codePointAt(0)!) ||
-        prev === "/" || prev === "<" || prev === ">" // apparently these too?
+        prev === "/" || prev === "<" || prev === ">"
       ) {
         pos++;
         continue;
       }
     }
 
-    const commandBegin = ++pos; // except the "/"
+    const commandBegin = ++pos;
     while (pos != end && isAlphaDigitOrUnderscore(str[pos])) {
-      pos++; // increment if the current char is okay.
+      pos++;
     }
     let commandEnd = pos;
     const commandSize = commandEnd - commandBegin;
@@ -76,11 +72,10 @@ export function matchBotCommands(str: string): Position[] {
     let hasMention = false;
     const commandEndBackup = commandEnd;
 
-    // check for the bot mention part of the command
     if (pos != end && str[pos] === "@") {
-      const mentionBegin = ++pos; // except the "@"
+      const mentionBegin = ++pos;
       while (pos != end && isAlphaDigitOrUnderscore(str[pos])) {
-        pos++; // increment if the current char is oky.
+        pos++;
       }
       const mentionEnd = pos;
       const mentionSize = mentionEnd - mentionBegin;
@@ -90,7 +85,6 @@ export function matchBotCommands(str: string): Position[] {
       }
     }
 
-    // is the next character okay??
     if (pos != end) {
       const next = str[pos];
       if (next === "/" || next === "<" || next === ">") {
@@ -300,8 +294,7 @@ export function matchBankCardNumbers(str: string) {
 }
 
 export function isURLUnicodeSymbol(c: number) {
-  if (0x2000 <= c && c <= 0x206f) { // General Punctuation
-    // Zero Width Non-Joiner/Joiner and various dashes
+  if (0x2000 <= c && c <= 0x206f) {
     return c == 0x200c || c == 0x200d || (0x2010 <= c && c <= 0x2015);
   }
   return getUnicodeSimpleCategory(c) != UnicodeSimpleCategory.Separator;
@@ -584,7 +577,6 @@ export function matchURLs(str: string) {
         }
       } else {
         const prefixEnd = prefix.length - 1;
-        // const prefixBack = prefixEnd - 1;
         const code = str.codePointAt(prefixEnd)!;
         const char = String.fromCodePoint(code);
         if (
@@ -635,7 +627,6 @@ export function getValidShortUsernames() {
   ];
 }
 
-/** Find poss of valid mentions in a given str. */
 export function findMentions(str: string) {
   return matchMentions(str).filter(([start, end]) => {
     const mention = str.substring(start + 1, end);
@@ -644,7 +635,6 @@ export function findMentions(str: string) {
   });
 }
 
-/** Find poss of valid bot commands in a given str. */
 export function findBotCommands(str: string) {
   return matchBotCommands(str);
 }
@@ -937,7 +927,6 @@ export function isCommonTLD(str: string) {
     }
   }
   if (isLower) {
-    // fast path
     return tlds.includes(str);
   }
 
@@ -1019,10 +1008,7 @@ export function fixURL(str: string) {
   while (pathPos > 0 && badPathEndChars.includes(path[pathPos - 1])) {
     pathPos--;
   }
-  fullUrl = fullUrl.substring(
-    0,
-    fullUrl.length - (path.length - pathPos), // > 0 ? (path.length - pathPos) : undefined,
-  );
+  fullUrl = fullUrl.substring(0, fullUrl.length - (path.length - pathPos));
 
   let prev = 0;
   let domainPartCount = 0;
