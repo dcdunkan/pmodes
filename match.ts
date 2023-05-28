@@ -382,51 +382,51 @@ export function matchTgURLs(str: string) {
   return result;
 }
 
+export function isProtocolSymbol(c: number) {
+  if (c < 0x80) {
+    return isAlphaOrDigit(String.fromCodePoint(c)) ||
+      c == "+".codePointAt(0)! || c == "-".codePointAt(0)!;
+  }
+  return getUnicodeSimpleCategory(c) !== UnicodeSimpleCategory.Separator;
+}
+
+export function isUserDataSymbol(c: number) {
+  switch (String.fromCodePoint(c)) {
+    case "\n":
+    case "/":
+    case "[":
+    case "]":
+    case "{":
+    case "}":
+    case "(":
+    case ")":
+    case "'":
+    case "`":
+    case "<":
+    case ">":
+    case '"':
+    case "@":
+    case String.fromCodePoint(0xab):
+    case String.fromCodePoint(0xbb):
+      return false;
+    default:
+      return isURLUnicodeSymbol(c);
+  }
+}
+
+export function isDomainSymbol(c: number) {
+  if (c < 0xc0) {
+    const char = String.fromCodePoint(c);
+    return char === "." ||
+      isAlphaDigitUnderscoreOrMinus(char) || char === "~";
+  }
+  return isURLUnicodeSymbol(c);
+}
+
 export function matchURLs(str: string) {
   const result: Position[] = [];
   const begin = 0;
   let end = str.length;
-
-  function isProtocolSymbol(c: number) {
-    if (c < 0x80) {
-      return isAlphaOrDigit(String.fromCodePoint(c)) ||
-        c == "+".codePointAt(0)! || c == "-".codePointAt(0)!;
-    }
-    return getUnicodeSimpleCategory(c) !== UnicodeSimpleCategory.Separator;
-  }
-
-  function isUserDataSymbol(c: number) {
-    switch (String.fromCodePoint(c)) {
-      case "\n":
-      case "/":
-      case "[":
-      case "]":
-      case "{":
-      case "}":
-      case "(":
-      case ")":
-      case "'":
-      case "`":
-      case "<":
-      case ">":
-      case '"':
-      case "@":
-      case String.fromCodePoint(0xab):
-      case String.fromCodePoint(0xbb):
-        return false;
-      default:
-        return isURLUnicodeSymbol(c);
-    }
-  }
-
-  function isDomainSymbol(c: number) {
-    if (c < 0xc0) {
-      const char = String.fromCodePoint(c);
-      return char === "." ||
-        isAlphaDigitUnderscoreOrMinus(char) || char === "~";
-    }
-    return isURLUnicodeSymbol(c);
-  }
 
   const badPathEndChars = [".", ":", ";", ",", "(", "'", "?", "!", "`"];
 
