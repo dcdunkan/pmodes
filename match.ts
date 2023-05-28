@@ -1,5 +1,5 @@
 import {
-CHECK,
+  CHECK,
   getUnicodeSimpleCategory,
   isAlpha,
   isAlphaDigitOrUnderscore,
@@ -1084,3 +1084,6 @@ export function findMediaTimestamps(str: string) {
   return result;
 }
 
+export function textLength(text: string) {
+  return text.length;
+}

@@ -2,11 +2,5 @@
   "lock": false,
   "tasks": {
     "test": "deno test --no-check"
-  },
-  "fmt": {
-    "exclude": ["vendor/"]
-  },
-  "lint": {
-    "exclude": ["vendor/"]
   }
 }

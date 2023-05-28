@@ -1,4 +1,4 @@
-import { getCategory } from "./vendor/esm.sh/unicode-properties@1.4.1.js";
+import { getCategory } from "https://esm.sh/unicode-properties@1.4.1";
 
 export function CHECK(condition: boolean) {
   if (!condition) {
