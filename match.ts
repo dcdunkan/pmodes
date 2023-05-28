@@ -87,7 +87,10 @@ export function matchBotCommands(str: string): Position[] {
 
     if (pos != end) {
       const next = str[pos];
-      if (next === "/" || next === "<" || next === ">") {
+      if (
+        isWordCharacter(str.codePointAt(pos)!) || next === "/" ||
+        next === "<" || next === ">"
+      ) {
         if (!hasMention) continue;
         commandEnd = commandEndBackup;
       }
