@@ -615,47 +615,6 @@ export function matchURLs(str: string) {
   return result;
 }
 
-export function getValidShortUsernames() {
-  return [
-    "gif",
-    "wiki",
-    "vid",
-    "bing",
-    "pic",
-    "bold",
-    "imdb",
-    "coub",
-    "like",
-    "vote",
-  ];
-}
-
-export function findMentions(str: string) {
-  return matchMentions(str).filter(([start, end]) => {
-    const mention = str.substring(start + 1, end);
-    if (mention.length >= 4) return true;
-    return getValidShortUsernames().includes(mention.toLowerCase());
-  });
-}
-
-export function findBotCommands(str: string) {
-  return matchBotCommands(str);
-}
-
-export function findHashtags(str: string) {
-  return matchHashtags(str);
-}
-
-export function findCashtags(str: string) {
-  return matchCashtags(str);
-}
-
-export function CHECK(condition: boolean) {
-  if (!condition) {
-    console.trace("check failed");
-  }
-}
-
 export function isValidBankCard(str: string) {
   const MIN_CARD_LENGTH = 13;
   const MAX_CARD_LENGTH = 19;
@@ -706,42 +665,6 @@ export function isValidBankCard(str: string) {
     return digitCount == 16;
   }
   return true;
-}
-
-export function findBankCardNumbers(str: string) {
-  return matchBankCardNumbers(str).filter(([start, end]) => {
-    return isValidBankCard(str.substring(start, end));
-  });
-}
-
-export function findTgURLs(str: string) {
-  return matchTgURLs(str);
-}
-
-export function findMediaTimestamps(str: string) {
-  const result: [Position, number][] = [];
-  for (const [start, end] of matchMediaTimestamps(str)) {
-    const parts = str.substring(start, end).split(":");
-    if (parts.length > 3 || parts[parts.length - 1].length != 2) continue;
-    const seconds = parseInt(parts[parts.length - 1]);
-    if (seconds >= 60) continue;
-    if (parts.length == 2) {
-      if (parts[0].length > 4 || parts[0].length == 0) continue;
-      const minutes = parseInt(parts[0]);
-      result.push([[start, end], minutes * 60 + seconds]);
-      continue;
-    } else {
-      if (
-        parts[0].length > 2 || parts[1].length > 2 ||
-        parts[0].length == 0 || parts[1].length == 0
-      ) continue;
-      const minutes = parseInt(parts[1]);
-      if (minutes >= 60) continue;
-      const hours = parseInt(parts[0]);
-      result.push([[start, end], hours * 3600 + minutes * 60 + seconds]);
-    }
-  }
-  return result;
 }
 
 export function isEmailAddress(str: string) {
@@ -1071,6 +994,51 @@ export function fixURL(str: string) {
   return fullUrl;
 }
 
+export function getValidShortUsernames() {
+  return [
+    "gif",
+    "wiki",
+    "vid",
+    "bing",
+    "pic",
+    "bold",
+    "imdb",
+    "coub",
+    "like",
+    "vote",
+  ];
+}
+
+export function findMentions(str: string) {
+  return matchMentions(str).filter(([start, end]) => {
+    const mention = str.substring(start + 1, end);
+    if (mention.length >= 4) return true;
+    return getValidShortUsernames().includes(mention.toLowerCase());
+  });
+}
+
+export function findBotCommands(str: string) {
+  return matchBotCommands(str);
+}
+
+export function findHashtags(str: string) {
+  return matchHashtags(str);
+}
+
+export function findCashtags(str: string) {
+  return matchCashtags(str);
+}
+
+export function findBankCardNumbers(str: string) {
+  return matchBankCardNumbers(str).filter(([start, end]) => {
+    return isValidBankCard(str.substring(start, end));
+  });
+}
+
+export function findTgURLs(str: string) {
+  return matchTgURLs(str);
+}
+
 export function findURLs(str: string) {
   const result: [Position, boolean][] = [];
   for (const [s, e] of matchURLs(str)) {
@@ -1087,4 +1055,36 @@ export function findURLs(str: string) {
     }
   }
   return result;
+}
+
+export function findMediaTimestamps(str: string) {
+  const result: [Position, number][] = [];
+  for (const [start, end] of matchMediaTimestamps(str)) {
+    const parts = str.substring(start, end).split(":");
+    if (parts.length > 3 || parts[parts.length - 1].length != 2) continue;
+    const seconds = parseInt(parts[parts.length - 1]);
+    if (seconds >= 60) continue;
+    if (parts.length == 2) {
+      if (parts[0].length > 4 || parts[0].length == 0) continue;
+      const minutes = parseInt(parts[0]);
+      result.push([[start, end], minutes * 60 + seconds]);
+      continue;
+    } else {
+      if (
+        parts[0].length > 2 || parts[1].length > 2 ||
+        parts[0].length == 0 || parts[1].length == 0
+      ) continue;
+      const minutes = parseInt(parts[1]);
+      if (minutes >= 60) continue;
+      const hours = parseInt(parts[0]);
+      result.push([[start, end], hours * 3600 + minutes * 60 + seconds]);
+    }
+  }
+  return result;
+}
+
+export function CHECK(condition: boolean) {
+  if (!condition) {
+    console.trace("check failed");
+  }
 }
