@@ -1,4 +1,5 @@
 import {
+CHECK,
   getUnicodeSimpleCategory,
   isAlpha,
   isAlphaDigitOrUnderscore,
@@ -1083,8 +1084,3 @@ export function findMediaTimestamps(str: string) {
   return result;
 }
 
-export function CHECK(condition: boolean) {
-  if (!condition) {
-    console.trace("check failed");
-  }
-}

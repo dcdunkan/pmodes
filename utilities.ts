@@ -1,5 +1,11 @@
 import { getCategory } from "./vendor/esm.sh/unicode-properties@1.4.1.js";
 
+export function CHECK(condition: boolean) {
+  if (!condition) {
+    console.trace("check failed");
+  }
+}
+
 export function isWordCharacter(code: number) {
   switch (getUnicodeSimpleCategory(code)) {
     case UnicodeSimpleCategory.Letter:
