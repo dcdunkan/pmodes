@@ -1,3 +1,4 @@
 # for reference
 MessageEntity.cpp
+MessageEntity.h
 message_entities.cpp
