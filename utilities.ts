@@ -71,3 +71,7 @@ export function isHashtagLetter(codepoint: number): boolean {
       return false;
   }
 }
+
+export function isUTF8CharacterFirstCodeUnit(c: number) {
+  return (c & 0xC0) != 0x80;
+}

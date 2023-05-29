@@ -1089,53 +1089,6 @@ export function textLength(text: string) {
   return text.length;
 }
 
-export function mergeEntities(
-  oldEntities: MessageEntity[],
-  newEntities: MessageEntity[],
-) {
-  if (newEntities.length == 0) return oldEntities;
-  if (oldEntities.length == 0) return newEntities;
-
-  const result = new Array<MessageEntity>(
-    /* oldEntities.length + newEntities.length */
-  );
-
-  let newIt = 0;
-  const newEnd = newEntities.length;
-  for (const oldEntity of oldEntities) {
-    while (
-      newIt != newEnd &&
-      (newEntities[newIt].offset + newEntities[newIt].length) <=
-        oldEntity.offset
-    ) {
-      const removed = newEntities.shift();
-      if (removed == null) {
-        throw new Error("New entity shouldn't be undefined.");
-      }
-      result.push(removed);
-      ++newIt;
-    }
-    const oldEntityEnd = oldEntity.offset + oldEntity.length;
-    const removed = oldEntities.shift();
-    if (removed == null) throw new Error("Old entity shouldn't be undefined.");
-    result.push(oldEntity);
-    while (newIt != newEnd && newEntities[newIt].offset < oldEntityEnd) {
-      ++newIt;
-    }
-  }
-  while (newIt != newEnd) {
-    result.push(newEntities[newIt]);
-    ++newIt;
-  }
-
-  return result;
-}
-
-export function isPlainDomain(url: string) {
-  return url.indexOf("/") >= url.length && url.indexOf("?") >= url.length &&
-    url.indexOf("#") >= url.length;
-}
-
 // Modified from grammyjs/types.
 // Licensed under MIT (c) 2020-2023 KnorpelSenf and grammyjs Organization Members
 // deno-lint-ignore no-namespace
@@ -1213,7 +1166,7 @@ export enum MessageEntityType {
   PhoneNumber,
   Underline,
   Strikethrough,
-  BlockQuote,
+  Blockquote,
   BankCardNumber,
   MediaTimestamp,
   Spoiler,
@@ -1262,7 +1215,7 @@ function convertEntityTypeStringToEnum(
     case "pre_code":
       return MessageEntityType.PreCode;
     case "block_quote":
-      return MessageEntityType.BlockQuote;
+      return MessageEntityType.Blockquote;
     case "bank_card_number":
       return MessageEntityType.BankCardNumber;
     case "media_timestamp":
@@ -1270,6 +1223,57 @@ function convertEntityTypeStringToEnum(
     default:
       return MessageEntityType.Size;
       // throw new Error("UNREACHEABLE");
+  }
+}
+
+function convertEntityTypeEnumToString(
+  type: MessageEntityType,
+): MessageEntity["type"] {
+  switch (type) {
+    case MessageEntityType.Mention:
+      return "mention";
+    case MessageEntityType.Hashtag:
+      return "hashtag";
+    case MessageEntityType.BotCommand:
+      return "bot_command";
+    case MessageEntityType.Url:
+      return "url";
+    case MessageEntityType.EmailAddress:
+      return "email";
+    case MessageEntityType.Bold:
+      return "bold";
+    case MessageEntityType.Italic:
+      return "italic";
+    case MessageEntityType.Code:
+      return "code";
+    case MessageEntityType.Pre:
+      return "pre";
+    case MessageEntityType.PreCode:
+      return "pre_code";
+    case MessageEntityType.TextUrl:
+      return "text_link";
+    case MessageEntityType.MentionName:
+      return "text_mention";
+    case MessageEntityType.Cashtag:
+      return "cashtag";
+    case MessageEntityType.PhoneNumber:
+      return "phone_number";
+    case MessageEntityType.Underline:
+      return "underline";
+    case MessageEntityType.Strikethrough:
+      return "strikethrough";
+    case MessageEntityType.Blockquote:
+      return "block_quote";
+    case MessageEntityType.BankCardNumber:
+      return "bank_card_number";
+    case MessageEntityType.MediaTimestamp:
+      return "media_timestamp";
+    case MessageEntityType.Spoiler:
+      return "spoiler";
+    case MessageEntityType.CustomEmoji:
+      return "custom_emoji";
+    default:
+      throw new Error("UNREACHABLE");
   }
 }
 
@@ -1291,7 +1295,7 @@ export function getTypePriority(type: MessageEntityType) {
     50, /* PhoneNumber */
     92, /* Underline */
     93, /* Strikethrough */
-    0, /* BlockQuote */
+    0, /* Blockquote */
     50, /* BankCardNumber */
     50, /* MediaTimestamp */
     94, /* Spoiler */
@@ -1328,8 +1332,8 @@ export function getSplittableEntitiesMask() {
     getEntityTypeMask(MessageEntityType.Spoiler);
 }
 
-export function getBlockQuoteEntitesMask() {
-  return getEntityTypeMask(MessageEntityType.BlockQuote);
+export function getBlockquoteEntitesMask() {
+  return getEntityTypeMask(MessageEntityType.Blockquote);
 }
 
 export function getContinuousEntitiesMask() {
@@ -1355,7 +1359,7 @@ export function getPreEntitiesMask() {
 
 export function getUserEntitiesMask() {
   return getSplittableEntitiesMask() |
-    getBlockQuoteEntitesMask() |
+    getBlockquoteEntitesMask() |
     getEntityTypeMask(MessageEntityType.TextUrl) |
     getEntityTypeMask(MessageEntityType.MentionName) |
     getEntityTypeMask(MessageEntityType.CustomEmoji) |
@@ -1366,8 +1370,8 @@ export function isSplittableEntity(type: MessageEntityType) {
   return (getEntityTypeMask(type) & getSplittableEntitiesMask()) != 0;
 }
 
-export function isBlockQuoteEntity(type: MessageEntityType) {
-  return type == MessageEntityType.BlockQuote;
+export function isBlockquoteEntity(type: MessageEntityType) {
+  return type == MessageEntityType.Blockquote;
 }
 
 export function isContinuousEntity(type: MessageEntityType) {
@@ -1446,11 +1450,11 @@ export function areEntitiesValid(entities: MessageEntity[]): boolean {
       }
       if (
         isPreEntity(entityType) &&
-        (nestedEntityTypeMask & ~getBlockQuoteEntitesMask()) != 0
+        (nestedEntityTypeMask & ~getBlockquoteEntitesMask()) != 0
       ) return false;
 
       if (
-        (isContinuousEntity(entityType) || isBlockQuoteEntity(entityType)) &&
+        (isContinuousEntity(entityType) || isBlockquoteEntity(entityType)) &&
         (nestedEntityTypeMask & getContinuousEntitiesMask()) != 0
       ) return false;
 
@@ -1495,4 +1499,230 @@ export function removeIntersectingEntities(
   return entities;
 }
 
+export function removeEntitiesIntersectingBlockquote(
+  entities: MessageEntity[],
+  blockquoteEntities: MessageEntity[],
+) {
+  // check_non_intersecting(entities); --> No proper implementations yet.
+  if (blockquoteEntities.length == 0) return;
 
+  let blockquoteIt = 0;
+  let leftEntities = 0;
+
+  for (let i = 0; i < entities.length; i++) {
+    while (
+      blockquoteIt != blockquoteEntities.length &&
+      (convertEntityTypeStringToEnum(blockquoteEntities[blockquoteIt].type) !=
+          MessageEntityType.Blockquote ||
+        blockquoteEntities[blockquoteIt].offset +
+              blockquoteEntities[blockquoteIt].length <= entities[i].offset)
+    ) {
+      ++blockquoteIt;
+    }
+
+    const blockquote = blockquoteEntities[blockquoteIt];
+    if (
+      blockquoteIt != blockquoteEntities.length &&
+      (blockquote.offset + blockquote.length <
+          entities[i].offset + entities[i].length ||
+        (entities[i].offset < blockquote.offset &&
+          blockquote.offset < entities[i].offset + entities[i].length))
+    ) {
+      continue;
+    }
+
+    if (i != leftEntities) {
+      const removed = entities.splice(i, 1);
+      entities[leftEntities] = removed[0];
+    }
+    leftEntities++;
+  }
+
+  entities.splice(leftEntities);
+
+  return entities;
+}
+
+export function findEntities(
+  text: string,
+  skipBotCommands: boolean,
+  skipMediaTimestamps: boolean,
+): MessageEntity[] {
+  const entities: MessageEntity[] = [];
+
+  function addEntities(
+    type: MessageEntityType,
+    findEntitiesFn: (text: string) => Position[],
+  ) {
+    const newEntities = findEntitiesFn(text);
+    for (const entity of newEntities) {
+      const offset = entity[0];
+      const length = entity[1] - entity[0];
+      // @ts-ignore idk
+      entities.push({
+        type: convertEntityTypeEnumToString(type),
+        offset,
+        length,
+      });
+    }
+  }
+
+  addEntities(MessageEntityType.Mention, findMentions);
+  if (!skipBotCommands) {
+    addEntities(MessageEntityType.BotCommand, findBotCommands);
+  }
+  addEntities(MessageEntityType.Hashtag, findHashtags);
+  addEntities(MessageEntityType.Cashtag, findCashtags);
+  // TODO: find_phone_numbers.
+  addEntities(MessageEntityType.BankCardNumber, findBankCardNumbers);
+  addEntities(MessageEntityType.Url, findTgURLs);
+
+  const urls = findURLs(text);
+  for (const [url, email] of urls) {
+    const type = email ? "email" : "url";
+    const offset = url[0];
+    const length = url[1] - url[0];
+    entities.push({ type, offset, length });
+  }
+  if (!skipMediaTimestamps) {
+    const mediaTimestamps = findMediaTimestamps(text);
+    for (const [entity, timestamp] of mediaTimestamps) {
+      const offset = entity[0];
+      const length = entity[1] - entity[0];
+      entities.push({ type: "media_timestamp", offset, length, timestamp });
+    }
+  }
+
+  // fix_entity_offsets --> we're not fixing anything. we'll see how it goes.
+
+  return entities;
+}
+
+export function findMediaTimestampEntities(text: string) {
+  const entities: MessageEntity[] = [];
+
+  const mediaTimestamps = findMediaTimestamps(text);
+  for (const [entity, timestamp] of mediaTimestamps) {
+    const offset = entity[0];
+    const length = entity[1] - entity[0];
+    entities.push({ type: "media_timestamp", offset, length, timestamp });
+  }
+
+  // fix_entity_offsets --> we're not fixing anything. we'll see how it goes.
+
+  return entities;
+}
+
+export function mergeEntities(
+  oldEntities: MessageEntity[],
+  newEntities: MessageEntity[],
+) {
+  if (newEntities.length == 0) return oldEntities;
+  if (oldEntities.length == 0) return newEntities;
+
+  const result = new Array<MessageEntity>(
+    /* oldEntities.length + newEntities.length */
+  );
+
+  let newIt = 0;
+  const newEnd = newEntities.length;
+  for (const oldEntity of oldEntities) {
+    while (
+      newIt != newEnd &&
+      (newEntities[newIt].offset + newEntities[newIt].length) <=
+        oldEntity.offset
+    ) {
+      const removed = newEntities.shift();
+      if (removed == null) {
+        throw new Error("New entity shouldn't be undefined.");
+      }
+      result.push(removed);
+      ++newIt;
+    }
+    const oldEntityEnd = oldEntity.offset + oldEntity.length;
+    const removed = oldEntities.shift();
+    if (removed == null) throw new Error("Old entity shouldn't be undefined.");
+    result.push(oldEntity);
+    while (newIt != newEnd && newEntities[newIt].offset < oldEntityEnd) {
+      ++newIt;
+    }
+  }
+  while (newIt != newEnd) {
+    result.push(newEntities[newIt]);
+    ++newIt;
+  }
+
+  return result;
+}
+
+export function isPlainDomain(url: string) {
+  return url.indexOf("/") >= url.length && url.indexOf("?") >= url.length &&
+    url.indexOf("#") >= url.length;
+}
+
+// I know originally this is a class, but for now this'll work.
+export interface FormattedText {
+  text: string;
+  entities: MessageEntity[];
+}
+
+export function getFirstUrl({ text, entities }: FormattedText) {
+  for (const entity of entities) {
+    switch (entity.type) {
+      case "mention":
+      case "hashtag":
+      case "cashtag":
+      case "bot_command":
+        break;
+      case "url": {
+        if (entity.length <= 4) continue;
+        const url = text.substring(
+          entity.offset,
+          entity.offset + entity.length,
+        );
+        const scheme = url.substring(0, 4).toLowerCase();
+        if (
+          scheme === "ton:" || scheme === "ftp:" || scheme.startsWith("tg:") ||
+          isPlainDomain(url)
+        ) continue;
+        return url;
+      }
+      case "email":
+      case "phone_number":
+      case "bold":
+      case "italic":
+      case "underline":
+      case "strikethrough":
+      case "spoiler":
+      case "code":
+      case "pre_code":
+      case "block_quote":
+      case "bank_card_number":
+      case "custom_emoji":
+      case "pre":
+        break;
+      case "text_link": {
+        const url = entity.url;
+        if (
+          url.startsWith("ton:") || url.startsWith("tg:") ||
+          url.startsWith("ftp:")
+        ) continue;
+        return url;
+      }
+      case "text_mention":
+      case "media_timestamp":
+        break;
+    }
+  }
+
+  return "";
+}
+
+export function parseMarkdown(text: string): FormattedText {
+  let resultSize = 0;
+  const entities: MessageEntity[] = [];
+  let size = text.length;
+  let offset = 0;
+
+  return { text, entities };
+}
