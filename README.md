@@ -2,7 +2,7 @@
 
 # Parse Modes
 
-> Initially created for [an unofficial testing framework for grammY](https://github.com/dcdunkan/grammy_tests).
+Initially created for [an unofficial testing framework for grammY](https://github.com/dcdunkan/grammy_tests).
 
 </div>
 <br/>
