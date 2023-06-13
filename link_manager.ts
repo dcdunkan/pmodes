@@ -1,6 +1,8 @@
-import { HttpUrlProtocol, parseURL } from "./http_url.ts";
+import { HttpUrl, HttpUrlProtocol, parseURL } from "./http_url.ts";
 import { UserId } from "./user_id.ts";
 import { CHECK, isAlphaOrDigit } from "./utilities.ts";
+
+export const INVALID_HTTPURL = new HttpUrl(HttpUrlProtocol.Http, "", "", false, 0, 0, "");
 
 export class LinkManager {
   static getLinkUserId(url: string): UserId {
@@ -74,7 +76,17 @@ export class LinkManager {
     if ((isTg || isTon) && link.startsWith("//")) {
       link = link.substring(2);
     }
-    const httpUrl = parseURL(link);
+
+    let ignored = false;
+    let httpUrl: HttpUrl;
+    try {
+      httpUrl = parseURL(link);
+    } catch (_) {
+      // TDlib just unsafely ignores the error and defines it anyway, so...
+      httpUrl = INVALID_HTTPURL;
+      ignored = true;
+    }
+
     if (httpsOnly && (httpUrl.protocol != HttpUrlProtocol.Https || isTg || isTon)) {
       throw new Error("Only HTTP links are allowed");
     }
@@ -90,7 +102,7 @@ export class LinkManager {
       }
 
       let query = httpUrl.query;
-      CHECK(query[0] === "/");
+      if (!ignored) CHECK(query[0] === "/");
       if (query.length > 1 && query[1] === "?") {
         query = query.substring(1);
       }
