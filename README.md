@@ -5,7 +5,6 @@
 <sup>Initially created for [an unofficial testing framework for grammY](https://github.com/dcdunkan/grammy_tests).</sup>
 
 </div>
-<br/>
 
 A **work-in-progress** TypeScript implementation of the [TDLib](https://github.com/tdlib/td)'s functions and utilities
 related to parsing text with several parse modes and matching text entities.
@@ -15,9 +14,3 @@ quality of the implementation, as I'm **not** good at C++ (TDLib is written in C
 TDLib source without a change. And they seem to be passing. So, I'll take that as a "it works"!
 
 Anyway, thank you.
-
-<div align="center">
-
-###### Licensed under MIT &copy; 2023 Dunkan
-
-</div>
