@@ -17,6 +17,11 @@ export function isWordCharacter(code: number) {
   }
 }
 
+export function isSpace(c: string) {
+  return c === " " || c === "\t" || c === "\r" || c === "\n" || c === "\0" ||
+    c === "\v";
+}
+
 export function isAlpha(c: string) {
   return ("A" <= c && c <= "Z") || ("a" <= c && c <= "z");
 }
@@ -35,6 +40,12 @@ export function isAlphaDigitOrUnderscore(c: string) {
 
 export function isAlphaDigitUnderscoreOrMinus(c: string) {
   return isAlphaOrDigit(c) || c === "_" || c === "-";
+}
+
+export function isHexDigit(c: string) {
+  if (isDigit(c)) return true;
+  const code = String.fromCodePoint(c.codePointAt(0)! | 0x20);
+  return "a" <= code && code <= "f";
 }
 
 export enum UnicodeSimpleCategory {

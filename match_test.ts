@@ -438,7 +438,6 @@ Deno.test("url", () => {
     expectedUrls: string[],
     expectedEmailAddresses: string[] = [],
   ) => {
-    // str.split("").map((r, u) => console.log({ r, u ]););
     const results = findURLs(str);
     const resultUrls: string[] = [];
     const resultEmailAddress: string[] = [];

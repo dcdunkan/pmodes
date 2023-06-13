@@ -1,3 +1,5 @@
+import { LinkManager } from "./link_manager.ts";
+import { UserId } from "./user_id.ts";
 import {
   CHECK,
   getUnicodeSimpleCategory,
@@ -7,10 +9,11 @@ import {
   isAlphaOrDigit,
   isDigit,
   isHashtagLetter,
+  isSpace,
+  isUTF8CharacterFirstCodeUnit,
   isWordCharacter,
   UnicodeSimpleCategory,
 } from "./utilities.ts";
-import { User } from "https://deno.land/x/grammy_types@v3.1.1/mod.ts";
 
 export type Position = [number, number];
 
@@ -847,8 +850,7 @@ export function isCommonTLD(str: string) {
 
   let isLower = true;
   for (const c of str) {
-    const unsigned =
-      ((c.codePointAt(0)! - "a".codePointAt(0)!) & 0xFFFFFFFF) >>> 0;
+    const unsigned = ((c.codePointAt(0)! - "a".codePointAt(0)!) & 0xFFFFFFFF) >>> 0;
     if (unsigned > "z".codePointAt(0)! - "a".codePointAt(0)!) {
       isLower = false;
       break;
@@ -1128,7 +1130,8 @@ export namespace MessageEntity {
   }
   export interface TextMentionMessageEntity extends AbstractMessageEntity {
     type: "text_mention";
-    user: User;
+    // user: User;
+    user_id: UserId;
   }
   export interface CustomEmojiMessageEntity extends AbstractMessageEntity {
     type: "custom_emoji";
@@ -1718,11 +1721,164 @@ export function getFirstUrl({ text, entities }: FormattedText) {
   return "";
 }
 
-export function parseMarkdown(text: string): FormattedText {
+export function parseMarkdown(_text: string): FormattedText {
+  const text = _text.split("");
   let resultSize = 0;
   const entities: MessageEntity[] = [];
-  let size = text.length;
+  const size = text.length;
   let offset = 0;
 
-  return { text, entities };
+  for (let i = 0; i < size; i++) {
+    const c = text[i], next = text[i + 1];
+    if (
+      c === "\\" &&
+      (next === "_" || next === "*" || next === "`" || next === "[")
+    ) {
+      i++;
+      text[resultSize++] = text[i];
+      offset++;
+      continue;
+    }
+
+    if (c !== "_" && c !== "*" && c !== "`" && c !== "[") {
+      if (isUTF8CharacterFirstCodeUnit(c.codePointAt(0)!)) {
+        offset += 1 + ((c.codePointAt(0)! >= 0xf0) ? 1 : 0);
+      }
+      text[resultSize++] = text[i];
+      continue;
+    }
+
+    const beginPos = i;
+    let endCharacter = text[i];
+    let isPre = false;
+    if (c === "[") endCharacter = "]";
+
+    i++;
+
+    let language: string | undefined = undefined;
+    if (c === "`" && text[i] === "`" && text[i + 1] === "`") {
+      i += 2;
+      isPre = true;
+      let languageEnd = i;
+
+      while (!isSpace(text[languageEnd]) && text[languageEnd] != "`") {
+        languageEnd++;
+      }
+
+      if (i != languageEnd && languageEnd < size && text[languageEnd] != "`") {
+        language = text.slice(i, languageEnd).join("");
+        i = languageEnd;
+      }
+
+      if (text[i] === "\n" || text[i] === "\r") {
+        if (
+          (text[i + 1] === "\n" || text[i + 1] === "\r") &&
+          text[i] != text[i + 1]
+        ) {
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+    }
+
+    const entityOffset = offset;
+    while (
+      i < size &&
+      (text[i] !== endCharacter ||
+        (isPre && !(text[i + 1] === "`" && text[i + 2] === "`")))
+    ) {
+      const curCh = text[i];
+      if (isUTF8CharacterFirstCodeUnit(curCh.codePointAt(0)!)) {
+        offset += 1 + (curCh.codePointAt(0)! >= 0xf0 ? 1 : 0);
+      }
+      text[resultSize++] = text[i++];
+    }
+
+    if (i == size) {
+      throw new Error(
+        "Can't find end of the entity starting at byte offset " + beginPos,
+      );
+    }
+
+    if (entityOffset != offset) {
+      const entityLength = offset - entityOffset;
+      switch (c) {
+        case "_":
+          entities.push({
+            type: "italic",
+            offset: entityOffset,
+            length: entityLength,
+          });
+          break;
+        case "*":
+          entities.push({
+            type: "bold",
+            offset: entityOffset,
+            length: entityLength,
+          });
+          break;
+        case "[": {
+          let url = "";
+          if (text[i + 1] !== "(") {
+            url = text.slice(beginPos + 1, i).join("");
+          } else {
+            i += 2;
+            while (i < size && text[i] !== ")") {
+              url += text[i++];
+            }
+          }
+          const userId = LinkManager.getLinkUserId(url);
+          if (userId.isValid()) {
+            entities.push({
+              type: "text_mention",
+              offset: entityOffset,
+              length: entityLength,
+              user_id: userId,
+            });
+          } else {
+            url = LinkManager.getCheckedLink(url);
+            if (url.length != 0) {
+              entities.push({
+                type: "text_link",
+                offset: entityOffset,
+                length: entityLength,
+                url: url,
+              });
+            }
+          }
+          break;
+        }
+        case "`":
+          if (isPre) {
+            if (language == null || language.trim() === "") {
+              entities.push({
+                type: "pre",
+                offset: entityOffset,
+                length: entityLength,
+              });
+            } else {
+              entities.push({
+                type: "pre_code",
+                offset: entityOffset,
+                length: entityLength,
+              });
+            }
+          } else {
+            entities.push({
+              type: "code",
+              offset: entityOffset,
+              length: entityLength,
+            });
+          }
+          break;
+        default:
+          throw new Error("UNREACHABLE");
+      }
+    }
+
+    if (isPre) i += 2;
+  }
+
+  return { text: text.slice(0, resultSize).join(""), entities };
 }
