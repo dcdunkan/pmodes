@@ -1,5 +1,8 @@
 {
   "lock": false,
+  "fmt": {
+    "lineWidth": 120
+  },
   "tasks": {
     "test": "deno test --no-check"
   }
