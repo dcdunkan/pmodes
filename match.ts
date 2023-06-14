@@ -1,5 +1,7 @@
+import { CustomEmojiId } from "./custom_emoji_id.ts";
 import { LinkManager } from "./link_manager.ts";
 import { MessageEntity, MessageEntityType } from "./types.ts";
+import { UserId } from "./user_id.ts";
 import {
   CHECK,
   convertEntityTypeEnumToString,
@@ -17,7 +19,7 @@ import {
   LOG_CHECK,
   UnicodeSimpleCategory,
 } from "./utilities.ts";
-import { equal } from "https://deno.land/std@0.191.0/testing/asserts.ts";
+import { equal, unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
 
 export type Position = [number, number];
 
@@ -1601,8 +1603,8 @@ export function getFirstUrl({ text, entities }: FormattedText) {
   return "";
 }
 
-export function parseMarkdown(_text: string): FormattedText {
-  const text = _text.split("");
+export function parseMarkdown(text_: string): FormattedText {
+  const text = [...text_];
   let resultSize = 0;
   const entities: MessageEntity[] = [];
   const size = text.length;
@@ -1742,6 +1744,7 @@ export function parseMarkdown(_text: string): FormattedText {
                 type: "pre_code",
                 offset: entityOffset,
                 length: entityLength,
+                language,
               });
             }
           } else {
@@ -1759,6 +1762,271 @@ export function parseMarkdown(_text: string): FormattedText {
 
     if (isPre) i += 2;
   }
+
+  return { text: text.slice(0, resultSize).join(""), entities };
+}
+
+export interface EntityInfo {
+  type: MessageEntityType;
+  argument: string;
+  entityOffset: number;
+  entityByteOffset: number;
+  entityBeginPos: number;
+}
+
+export function parseMarkdownV2(text_: string) {
+  const text = [...text_];
+  let resultSize = 0;
+  let entities: MessageEntity[] = [];
+  let utf16Offset = 0;
+
+  const nestedEntities: EntityInfo[] = [];
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === "\\" && text[i + 1].codePointAt(0)! > 0 && text[i + 1].codePointAt(0)! <= 126) {
+      i++;
+      utf16Offset += 1;
+      text[resultSize++] = text[i];
+      continue;
+    }
+
+    let reservedCharacters = ["_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"];
+    if (nestedEntities.length != 0) {
+      switch (nestedEntities[nestedEntities.length - 1].type) {
+        case MessageEntityType.Code:
+        case MessageEntityType.Pre:
+        case MessageEntityType.PreCode:
+          reservedCharacters = ["`"];
+          break;
+        default:
+          break;
+      }
+    }
+
+    if (!reservedCharacters.includes(text[i])) {
+      if (isUTF8CharacterFirstCodeUnit(c.codePointAt(0)!)) {
+        utf16Offset += 1 + (c.codePointAt(0)! >= 0xf0 ? 1 : 0);
+      }
+      text[resultSize++] = text[i];
+      continue;
+    }
+
+    let isEndOfAnEntity = false;
+    if (nestedEntities.length != 0) {
+      isEndOfAnEntity = (() => {
+        switch (nestedEntities[nestedEntities.length - 1].type) {
+          case MessageEntityType.Bold:
+            return c === "*";
+          case MessageEntityType.Italic:
+            return c === "_" && text[i + 1] !== "_";
+          case MessageEntityType.Code:
+            return c === "`";
+          case MessageEntityType.Pre:
+          case MessageEntityType.PreCode:
+            return c === "`" && text[i + 1] === "`" && text[i + 2] === "`";
+          case MessageEntityType.TextUrl:
+            return c === "]";
+          case MessageEntityType.Underline:
+            return c === "_" && text[i + 1] === "_";
+          case MessageEntityType.Strikethrough:
+            return c === "~";
+          case MessageEntityType.Spoiler:
+            return c === "|" && text[i + 1] === "|";
+          case MessageEntityType.CustomEmoji:
+            return c === "]";
+          default:
+            unreachable();
+        }
+      })();
+    }
+
+    if (!isEndOfAnEntity) {
+      let type: MessageEntityType;
+      let argument = "";
+      const entityByteOffset = i;
+
+      switch (c) {
+        case "_":
+          if (text[i + 1] === "_") {
+            type = MessageEntityType.Underline;
+            i++;
+          } else {
+            type = MessageEntityType.Italic;
+          }
+          break;
+        case "*":
+          type = MessageEntityType.Bold;
+          break;
+        case "~":
+          type = MessageEntityType.Strikethrough;
+          break;
+        case "|":
+          if (text[i + 1] === "|") {
+            i++;
+            type = MessageEntityType.Spoiler;
+          } else {
+            throw new Error(`Character '${text[i]}' is reserved and must be escaped with the preceding '\\'`);
+          }
+          break;
+        case "[":
+          type = MessageEntityType.TextUrl;
+          break;
+        case "`":
+          if (text[i + 1] === "`" && text[i + 2] === "`") {
+            i += 3;
+            type = MessageEntityType.Pre;
+            let languageEnd = i;
+            while (!isSpace(text[languageEnd]) && text[languageEnd] !== "`") {
+              languageEnd++;
+            }
+            if (i != languageEnd && languageEnd < text.length && text[languageEnd] !== "`") {
+              type = MessageEntityType.PreCode;
+              argument = text.slice(i, languageEnd).join("");
+              i = languageEnd;
+            }
+            if (text[i] === "\n" || text[i] === "\r") {
+              if ((text[i + 1] === "\n" || text[i + 1] === "\r") && text[i] !== text[i + 1]) {
+                i += 2;
+              } else {
+                i++;
+              }
+            }
+
+            i--;
+          } else {
+            type = MessageEntityType.Code;
+          }
+          break;
+        case "!":
+          if (text[i + 1] === "[") {
+            i++;
+            type = MessageEntityType.CustomEmoji;
+          } else {
+            throw new Error(`Character '${text[i]}' is reserved and must be escaped with the preceding '\\'`);
+          }
+          break;
+        default:
+          throw new Error(`Character '${text[i]}' is reserved and must be escaped with the preceding '\\'`);
+      }
+      nestedEntities.push({ type, argument, entityOffset: utf16Offset, entityByteOffset, entityBeginPos: resultSize });
+    } else {
+      let { type, argument } = nestedEntities[nestedEntities.length - 1];
+      let userId = new UserId();
+      let customEmojiId = new CustomEmojiId();
+      let skipEntity = utf16Offset == nestedEntities.at(-1)!.entityOffset;
+      switch (type) {
+        case MessageEntityType.Bold:
+        case MessageEntityType.Italic:
+        case MessageEntityType.Code:
+        case MessageEntityType.Strikethrough:
+          break;
+        case MessageEntityType.Underline:
+        case MessageEntityType.Spoiler:
+          i++;
+          break;
+        case MessageEntityType.Pre:
+        case MessageEntityType.PreCode:
+          i += 2;
+          break;
+        case MessageEntityType.TextUrl: {
+          let url = "";
+          if (text[i + 1] !== "(") {
+            url = text.slice(nestedEntities.at(-1)!.entityBeginPos, resultSize).join("");
+          } else {
+            i += 2;
+            const urlBeginPos = i;
+            while (i < text.length && text[i] !== ")") {
+              if (text[i] === "\\" && text[i + 1].codePointAt(0)! > 0 && text[i + 1].codePointAt(0)! <= 126) {
+                url += text[i + 1];
+                i += 2;
+                continue;
+              }
+              url += text[i++];
+            }
+            if (text[i] !== ")") {
+              throw new Error("Can't find end of a URL at byte offset " + urlBeginPos);
+            }
+          }
+          userId = LinkManager.getLinkUserId(url);
+          if (!userId.isValid()) {
+            url = LinkManager.getCheckedLink(url);
+            if (url.length == 0) {
+              skipEntity = true;
+            } else {
+              argument = url;
+            }
+          }
+          break;
+        }
+        case MessageEntityType.CustomEmoji: {
+          if (text[i + 1] !== "(") {
+            throw new Error("Custom emoji entity must contain a tg://emoji URL");
+          }
+          i += 2;
+          let url = "";
+          const urlBeginPos = i;
+          while (i < text.length && text[i] !== ")") {
+            if (text[i] === "\\" && text[i + 1].codePointAt(0)! > 0 && text[i + 1].codePointAt(0)! <= 126) {
+              url += text[i + 1];
+              i += 2;
+              continue;
+            }
+            url += text[i++];
+          }
+          if (text[i] !== ")") {
+            throw new Error("Can't find end of a custom emoji URL at byte offset " + urlBeginPos);
+          }
+          customEmojiId = LinkManager.getLinkCustomEmojiId(url);
+          break;
+        }
+        default:
+          unreachable();
+      }
+
+      if (!skipEntity) {
+        const entityOffset = nestedEntities.at(-1)!.entityOffset;
+        const entityLength = utf16Offset - entityOffset;
+        if (userId.isValid()) {
+          entities.push({ type: "text_mention", offset: entityOffset, length: entityLength, user_id: userId });
+        } else if (customEmojiId.isValid()) {
+          entities.push({
+            type: "custom_emoji",
+            offset: entityOffset,
+            length: entityLength,
+            custom_emoji_id: customEmojiId,
+          });
+        } else {
+          if (type == MessageEntityType.Bold) {
+            console.log(utf16Offset, entityOffset);
+          }
+          const entity: MessageEntity = {
+            ...(
+              type === MessageEntityType.TextUrl
+                ? { type: "text_link", url: argument }
+                : type === MessageEntityType.PreCode
+                ? { type: "pre_code", language: argument }
+                : { type: convertEntityTypeEnumToString(type) as MessageEntity.CommonMessageEntity["type"] }
+            ),
+            offset: entityOffset,
+            length: entityLength,
+          };
+          entities.push(entity);
+        }
+      }
+
+      nestedEntities.pop();
+    }
+  }
+
+  if (nestedEntities.length != 0) {
+    const last = nestedEntities[nestedEntities.length - 1];
+    throw new Error(
+      `Can't find end of ${convertEntityTypeEnumToString(last.type)} entity at byte offset ${last.entityByteOffset}`,
+    );
+  }
+
+  entities = sortEntities(entities);
 
   return { text: text.slice(0, resultSize).join(""), entities };
 }

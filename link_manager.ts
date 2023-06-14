@@ -1,3 +1,4 @@
+import { CustomEmojiId } from "./custom_emoji_id.ts";
 import { HttpUrlProtocol, parseURL } from "./http_url.ts";
 import { UserId } from "./user_id.ts";
 import { CHECK, isAlphaOrDigit } from "./utilities.ts";
@@ -19,7 +20,7 @@ export class LinkManager {
     const host = "user";
     if (
       !url.startsWith(host) ||
-      (url.length > host.length && !["/?#"].includes(url[host.length]))
+      (url.length > host.length && !["/", "?", "#"].includes(url[host.length]))
     ) {
       return new UserId();
     }
@@ -36,12 +37,10 @@ export class LinkManager {
     url = url.substring(0, hashPos == -1 ? undefined : hashPos);
 
     for (const parameter of url.split("&")) {
-      const [key, ..._value] = parameter.split("=");
-      const value = _value.join("=");
+      const [key, value] = parameter.split("=", 2);
       if (key === "id") {
         try {
-          const rUserId = parseInt(value);
-          if (isNaN(rUserId) || !rUserId) return new UserId();
+          const rUserId = BigInt(value);
           return new UserId(rUserId);
         } catch (_) {
           return new UserId();
@@ -50,6 +49,44 @@ export class LinkManager {
     }
 
     return new UserId();
+  }
+
+  static getLinkCustomEmojiId(url: string) {
+    url = url.toLowerCase();
+
+    const linkScheme = "tg:";
+    if (!url.startsWith(linkScheme)) {
+      throw new Error("Custom emoji URL must have scheme tg");
+    }
+    url = url.substring(linkScheme.length);
+    if (url.startsWith("//")) {
+      url = url.substring(2);
+    }
+
+    const host = "emoji";
+    if (!url.startsWith(host) || (url.length > host.length && !["/", "?", "#"].includes(url[host.length]))) {
+      throw new Error(`Custom emoji URL must have host "${host}"`);
+    }
+    url = url.substring(host.length);
+    if (url.startsWith("/")) {
+      url = url.substring(1);
+    }
+    if (!url.startsWith("?")) {
+      throw new Error("Custom emoji URL must have an emoji identifier");
+    }
+    url = url.substring(1);
+    const hashPos = url.indexOf("#");
+    url = url.substring(0, hashPos == -1 ? undefined : hashPos);
+
+    for (const parameter of url.split("&")) {
+      const [key, value] = parameter.split("=", 2);
+      if (key === "id") {
+        const rDocumentId = BigInt(value);
+        return new CustomEmojiId(rDocumentId);
+      }
+    }
+
+    throw new Error("Custom emoji URL must have an emoji identifier");
   }
 
   static getCheckedLink(link: string, httpOnly = false, httpsOnly = false): string {

@@ -3,6 +3,9 @@
   "fmt": {
     "lineWidth": 120
   },
+  "lint": {
+    "exclude": ["test_bot.ts"]
+  },
   "tasks": {
     "test": "deno test --no-check"
   }

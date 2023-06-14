@@ -23,13 +23,13 @@ export declare namespace MessageEntity {
       | "spoiler"
       | "code"
       // non bot API
-      | "pre_code"
+      | "pre"
       | "block_quote"
       | "bank_card_number";
   }
   export interface PreMessageEntity extends AbstractMessageEntity {
-    type: "pre";
-    language?: string;
+    type: "pre_code";
+    language: string;
   }
   export interface TextLinkMessageEntity extends AbstractMessageEntity {
     type: "text_link";
