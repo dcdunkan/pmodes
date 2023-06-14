@@ -1,7 +1,9 @@
 import { LinkManager } from "./link_manager.ts";
-import { UserId } from "./user_id.ts";
+import { MessageEntity, MessageEntityType } from "./types.ts";
 import {
   CHECK,
+  convertEntityTypeEnumToString,
+  convertEntityTypeStringToEnum,
   getUnicodeSimpleCategory,
   isAlpha,
   isAlphaDigitOrUnderscore,
@@ -12,8 +14,10 @@ import {
   isSpace,
   isUTF8CharacterFirstCodeUnit,
   isWordCharacter,
+  LOG_CHECK,
   UnicodeSimpleCategory,
 } from "./utilities.ts";
+import { equal } from "https://deno.land/std@0.191.0/testing/asserts.ts";
 
 export type Position = [number, number];
 
@@ -1091,195 +1095,6 @@ export function textLength(text: string) {
   return text.length;
 }
 
-// Modified from grammyjs/types.
-// Licensed under MIT (c) 2020-2023 KnorpelSenf and grammyjs Organization Members
-// deno-lint-ignore no-namespace
-export namespace MessageEntity {
-  interface AbstractMessageEntity {
-    type: string;
-    offset: number;
-    length: number;
-  }
-  export interface CommonMessageEntity extends AbstractMessageEntity {
-    type:
-      | "mention"
-      | "hashtag"
-      | "cashtag"
-      | "bot_command"
-      | "url"
-      | "email"
-      | "phone_number"
-      | "bold"
-      | "italic"
-      | "underline"
-      | "strikethrough"
-      | "spoiler"
-      | "code"
-      // non bot API
-      | "pre_code"
-      | "block_quote"
-      | "bank_card_number";
-  }
-  export interface PreMessageEntity extends AbstractMessageEntity {
-    type: "pre";
-    language?: string;
-  }
-  export interface TextLinkMessageEntity extends AbstractMessageEntity {
-    type: "text_link";
-    url: string;
-  }
-  export interface TextMentionMessageEntity extends AbstractMessageEntity {
-    type: "text_mention";
-    // user: User;
-    user_id: UserId;
-  }
-  export interface CustomEmojiMessageEntity extends AbstractMessageEntity {
-    type: "custom_emoji";
-    custom_emoji_id: string;
-  }
-  // non Bot API
-  export interface MediaTimestampMessageEntity extends AbstractMessageEntity {
-    type: "media_timestamp";
-    timestamp: number;
-  }
-}
-
-export type MessageEntity =
-  | MessageEntity.CommonMessageEntity
-  | MessageEntity.CustomEmojiMessageEntity
-  | MessageEntity.PreMessageEntity
-  | MessageEntity.TextLinkMessageEntity
-  | MessageEntity.TextMentionMessageEntity
-  | MessageEntity.MediaTimestampMessageEntity;
-
-export enum MessageEntityType {
-  Mention,
-  Hashtag,
-  BotCommand,
-  Url,
-  EmailAddress,
-  Bold,
-  Italic,
-  Code,
-  Pre,
-  PreCode,
-  TextUrl,
-  MentionName,
-  Cashtag,
-  PhoneNumber,
-  Underline,
-  Strikethrough,
-  Blockquote,
-  BankCardNumber,
-  MediaTimestamp,
-  Spoiler,
-  CustomEmoji,
-  Size,
-}
-
-function convertEntityTypeStringToEnum(
-  type: MessageEntity["type"],
-): MessageEntityType {
-  switch (type) {
-    case "mention":
-      return MessageEntityType.Mention;
-    case "hashtag":
-      return MessageEntityType.Hashtag;
-    case "cashtag":
-      return MessageEntityType.Cashtag;
-    case "bot_command":
-      return MessageEntityType.BotCommand;
-    case "url":
-      return MessageEntityType.Url;
-    case "email":
-      return MessageEntityType.EmailAddress;
-    case "phone_number":
-      return MessageEntityType.PhoneNumber;
-    case "bold":
-      return MessageEntityType.Bold;
-    case "italic":
-      return MessageEntityType.Italic;
-    case "underline":
-      return MessageEntityType.Underline;
-    case "strikethrough":
-      return MessageEntityType.Strikethrough;
-    case "spoiler":
-      return MessageEntityType.Spoiler;
-    case "code":
-      return MessageEntityType.Code;
-    case "custom_emoji":
-      return MessageEntityType.CustomEmoji;
-    case "pre":
-      return MessageEntityType.Pre;
-    case "text_link":
-      return MessageEntityType.TextUrl;
-    case "text_mention":
-      return MessageEntityType.MentionName;
-    case "pre_code":
-      return MessageEntityType.PreCode;
-    case "block_quote":
-      return MessageEntityType.Blockquote;
-    case "bank_card_number":
-      return MessageEntityType.BankCardNumber;
-    case "media_timestamp":
-      return MessageEntityType.MediaTimestamp;
-    default:
-      return MessageEntityType.Size;
-      // throw new Error("UNREACHEABLE");
-  }
-}
-
-function convertEntityTypeEnumToString(
-  type: MessageEntityType,
-): MessageEntity["type"] {
-  switch (type) {
-    case MessageEntityType.Mention:
-      return "mention";
-    case MessageEntityType.Hashtag:
-      return "hashtag";
-    case MessageEntityType.BotCommand:
-      return "bot_command";
-    case MessageEntityType.Url:
-      return "url";
-    case MessageEntityType.EmailAddress:
-      return "email";
-    case MessageEntityType.Bold:
-      return "bold";
-    case MessageEntityType.Italic:
-      return "italic";
-    case MessageEntityType.Code:
-      return "code";
-    case MessageEntityType.Pre:
-      return "pre";
-    case MessageEntityType.PreCode:
-      return "pre_code";
-    case MessageEntityType.TextUrl:
-      return "text_link";
-    case MessageEntityType.MentionName:
-      return "text_mention";
-    case MessageEntityType.Cashtag:
-      return "cashtag";
-    case MessageEntityType.PhoneNumber:
-      return "phone_number";
-    case MessageEntityType.Underline:
-      return "underline";
-    case MessageEntityType.Strikethrough:
-      return "strikethrough";
-    case MessageEntityType.Blockquote:
-      return "block_quote";
-    case MessageEntityType.BankCardNumber:
-      return "bank_card_number";
-    case MessageEntityType.MediaTimestamp:
-      return "media_timestamp";
-    case MessageEntityType.Spoiler:
-      return "spoiler";
-    case MessageEntityType.CustomEmoji:
-      return "custom_emoji";
-    default:
-      throw new Error("UNREACHABLE");
-  }
-}
-
 export function getTypePriority(type: MessageEntityType) {
   const priorities = [
     50, /* Mention */
@@ -1307,6 +1122,22 @@ export function getTypePriority(type: MessageEntityType) {
   return priorities[type];
 }
 
+export function removeEmptyEntities(entities: MessageEntity[]) {
+  return entities.filter((entity) => {
+    if (entity.length <= 0) return false;
+    switch (entity.type) {
+      case "text_link":
+        return entity.url.length != 0;
+      case "text_mention":
+        return entity.user_id.isValid();
+      case "custom_emoji":
+        return entity.custom_emoji_id.isValid();
+      default:
+        return true;
+    }
+  });
+}
+
 export function sortEntities(entities: MessageEntity[]) {
   return entities.sort(({ offset, type, length }, other) => {
     if (offset != other.offset) {
@@ -1321,6 +1152,16 @@ export function sortEntities(entities: MessageEntity[]) {
     );
     return priority < otherPriority ? -1 : 1;
   });
+}
+
+export function checkIsSorted(entities: MessageEntity[]) {
+  LOG_CHECK(equal(entities, sortEntities(entities)), "unsorted", entities);
+}
+
+export function checkNonIntersecting(entities: MessageEntity[]) {
+  for (let i = 0; i + 1 < entities.length; i++) {
+    LOG_CHECK(entities[i].offset + entities[i].length <= entities[i + 1].offset, "intersects:", entities);
+  }
 }
 
 export function getEntityTypeMask(type: MessageEntityType) {
@@ -1411,7 +1252,7 @@ export function getSplittableEntityTypeIndex(type: MessageEntityType) {
 
 export function areEntitiesValid(entities: MessageEntity[]): boolean {
   if (entities.length == 0) return true;
-  // check_is_sorted -> we have no proper implementation of this function definition.
+  checkIsSorted(entities); // has to be?
   const endPos = new Array<number>(SPLITTABLE_ENTITY_TYPE_COUNT).fill(-1);
   const nestedEntitiesStack: MessageEntity[] = [];
   let nestedEntityTypeMask = 0;
@@ -1425,7 +1266,6 @@ export function areEntitiesValid(entities: MessageEntity[]): boolean {
         (nestedEntitiesStack[nestedEntitiesStack.length - 1].offset +
           nestedEntitiesStack[nestedEntitiesStack.length - 1].length)
     ) {
-      // remove non-intersecting entities from the stack.
       const last = nestedEntitiesStack[nestedEntitiesStack.length - 1];
       nestedEntityTypeMask -= getEntityTypeMask(
         convertEntityTypeStringToEnum(last.type),
@@ -1484,7 +1324,7 @@ export function areEntitiesValid(entities: MessageEntity[]): boolean {
 export function removeIntersectingEntities(
   entities: MessageEntity[],
 ): MessageEntity[] {
-  // check_is_sorted???
+  checkIsSorted(entities);
   let lastEntityEnd = 0;
   let leftEntities = 0;
   for (let i = 0; i < entities.length; i++) {
@@ -1506,12 +1346,12 @@ export function removeEntitiesIntersectingBlockquote(
   entities: MessageEntity[],
   blockquoteEntities: MessageEntity[],
 ) {
-  // check_non_intersecting(entities); --> No proper implementations yet.
+  checkNonIntersecting(entities);
+  checkNonIntersecting(blockquoteEntities);
   if (blockquoteEntities.length == 0) return;
 
   let blockquoteIt = 0;
   let leftEntities = 0;
-
   for (let i = 0; i < entities.length; i++) {
     while (
       blockquoteIt != blockquoteEntities.length &&
@@ -1522,7 +1362,6 @@ export function removeEntitiesIntersectingBlockquote(
     ) {
       ++blockquoteIt;
     }
-
     const blockquote = blockquoteEntities[blockquoteIt];
     if (
       blockquoteIt != blockquoteEntities.length &&
@@ -1533,7 +1372,6 @@ export function removeEntitiesIntersectingBlockquote(
     ) {
       continue;
     }
-
     if (i != leftEntities) {
       const removed = entities.splice(i, 1);
       entities[leftEntities] = removed[0];
@@ -1542,6 +1380,47 @@ export function removeEntitiesIntersectingBlockquote(
   }
 
   entities.splice(leftEntities);
+  return entities;
+}
+
+export function fixEntityOffsets(text: string, entities: MessageEntity[]) {
+  if (entities.length == 0) return;
+  entities = sortEntities(entities);
+  entities = removeIntersectingEntities(entities);
+
+  const begin = 0, end = text.length;
+  let ptr = begin;
+
+  let utf16Pos = 0;
+  for (const entity of entities) {
+    let cnt = 2;
+    const entityBegin = entity.offset;
+    const entityEnd = entity.offset - entity.length;
+
+    let pos = (ptr - begin) | 0;
+    if (entityBegin == pos) {
+      cnt--;
+      entity.offset = utf16Pos;
+    }
+
+    // let skippedCode = 0;
+    while (ptr != end && cnt > 0) {
+      const c = text[ptr];
+      utf16Pos += 1 + (c.codePointAt(0)! >= 0xf0 ? 1 : 0);
+      // skippedCode = text.codePointAt(ptr)!;
+      ptr++;
+
+      pos = (ptr - begin) | 0;
+      if (entityBegin == pos) {
+        cnt--;
+        entity.offset = utf16Pos;
+      } else if (entityEnd == pos) {
+        cnt--;
+        entity.length = utf16Pos - entity.offset;
+      }
+    }
+    CHECK(cnt == 0);
+  }
 
   return entities;
 }
@@ -1551,7 +1430,7 @@ export function findEntities(
   skipBotCommands: boolean,
   skipMediaTimestamps: boolean,
 ): MessageEntity[] {
-  const entities: MessageEntity[] = [];
+  let entities: MessageEntity[] = [];
 
   function addEntities(
     type: MessageEntityType,
@@ -1561,9 +1440,8 @@ export function findEntities(
     for (const entity of newEntities) {
       const offset = entity[0];
       const length = entity[1] - entity[0];
-      // @ts-ignore idk
       entities.push({
-        type: convertEntityTypeEnumToString(type),
+        type: convertEntityTypeEnumToString(type) as MessageEntity.CommonMessageEntity["type"],
         offset,
         length,
       });
@@ -1596,13 +1474,14 @@ export function findEntities(
     }
   }
 
-  // fix_entity_offsets --> we're not fixing anything. we'll see how it goes.
+  const fixedEntities = fixEntityOffsets(text, entities);
+  if (fixedEntities != null) entities = fixedEntities;
 
   return entities;
 }
 
 export function findMediaTimestampEntities(text: string) {
-  const entities: MessageEntity[] = [];
+  let entities: MessageEntity[] = [];
 
   const mediaTimestamps = findMediaTimestamps(text);
   for (const [entity, timestamp] of mediaTimestamps) {
@@ -1611,7 +1490,8 @@ export function findMediaTimestampEntities(text: string) {
     entities.push({ type: "media_timestamp", offset, length, timestamp });
   }
 
-  // fix_entity_offsets --> we're not fixing anything. we'll see how it goes.
+  const fixedEntities = fixEntityOffsets(text, entities);
+  if (fixedEntities != null) entities = fixedEntities;
 
   return entities;
 }
