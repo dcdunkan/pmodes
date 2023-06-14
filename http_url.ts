@@ -85,6 +85,7 @@ export function parseURL(
       throw new Error("Unsupported URL protocol");
     }
   } else {
+    pos = 0;
     protocol = defaultProtocol;
   }
 
@@ -126,8 +127,7 @@ export function parseURL(
     const ipAddress = new IPAddress();
     try {
       ipAddress.initIpv6Port(host, 1);
-    } catch (error) {
-      console.error(error);
+    } catch (_error) {
       throw new Error("Wrong IPv6 address specified in the URL");
     }
     CHECK(ipAddress.isIpv6());
