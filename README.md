@@ -1,8 +1,8 @@
 <div align="center">
 
-## Parse Modes
+# Parse Modes
 
-<sup>Initially created for [an unofficial testing framework for grammY](https://github.com/dcdunkan/grammy_tests).</sup>
+Initially created for [an unofficial testing framework for grammY](https://github.com/dcdunkan/grammy_tests).
 
 </div>
 
