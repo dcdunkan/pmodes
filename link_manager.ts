@@ -1,8 +1,6 @@
-import { HttpUrl, HttpUrlProtocol, parseURL } from "./http_url.ts";
+import { HttpUrlProtocol, parseURL } from "./http_url.ts";
 import { UserId } from "./user_id.ts";
 import { CHECK, isAlphaOrDigit } from "./utilities.ts";
-
-export const INVALID_HTTPURL = new HttpUrl(HttpUrlProtocol.Http, "", "", false, 0, 0, "");
 
 export class LinkManager {
   static getLinkUserId(url: string): UserId {
