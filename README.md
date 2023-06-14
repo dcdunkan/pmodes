@@ -2,8 +2,6 @@
 
 # Parse Modes
 
-Initially created for [an unofficial testing framework for grammY](https://github.com/dcdunkan/grammy_tests).
-
 </div>
 
 A **work-in-progress** TypeScript implementation of the [TDLib](https://github.com/tdlib/td)'s functions and utilities
