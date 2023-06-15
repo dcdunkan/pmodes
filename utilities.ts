@@ -55,6 +55,85 @@ export function isHexDigit(c: string) {
   return "a" <= code && code <= "f";
 }
 
+export function hexToInt(c: string) {
+  let codepoint = c.codePointAt(0)!;
+  if (isDigit(c)) return codepoint - "0".codePointAt(0)!;
+  codepoint |= 0x20;
+  c = String.fromCodePoint(codepoint);
+  if ("a" <= c && c <= "f") {
+    return codepoint - "a".codePointAt(0)! + 10;
+  }
+  return 16;
+}
+
+export function appendUTF8CharacterUnsafe(text: Uint8Array, pos: number, code: number) {
+  if (code <= 0x7f) {
+    text[pos++] = code;
+  } else if (code <= 0x7ff) {
+    text[pos++] = 0xc0 | (code >> 6);
+    text[pos++] = 0x80 | (code & 0x3f);
+  } else if (code <= 0xffff) {
+    text[pos++] = 0xe0 | (code >> 12);
+    text[pos++] = 0x80 | ((code >> 6) & 0x3f);
+    text[pos++] = 0x80 | (code & 0x3f);
+  } else {
+    text[pos++] = 0xf0 | (code >> 18);
+    text[pos++] = 0x80 | ((code >> 12) & 0x3f);
+    text[pos++] = 0x80 | ((code >> 6) & 0x3f);
+    text[pos++] = 0x80 | (code & 0x3f);
+  }
+  return pos;
+}
+
+export function checkUTF8(str: string) {
+  const data = new TextEncoder().encode(str);
+  let pos = 0;
+  const dataEnd = data.length;
+
+  function ENSURE(condition: boolean) {
+    if (!condition) {
+      return false;
+    }
+  }
+
+  do {
+    const a = data[pos++];
+    if ((a & 0x80) == 0) {
+      if (pos == dataEnd + 1) {
+        return true;
+      }
+      continue;
+    }
+
+    ENSURE((a & 0x40) != 0);
+
+    const b = data[pos++];
+    ENSURE((b & 0xc0) == 0x80);
+    if ((a & 0x20) == 0) {
+      ENSURE((a & 0x1e) > 0);
+      continue;
+    }
+
+    const c = data[pos++];
+    ENSURE((c & 0xc0) == 0x80);
+    if ((a & 0x10) == 0) {
+      const x = ((a & 0x0f) << 6) | (b & 0x20);
+      ENSURE(x != 0 && x != 0x360); // surrogates
+      continue;
+    }
+
+    const d = data[pos++];
+    ENSURE((d & 0xc0) == 0x80);
+    if ((a & 0x08) == 0) {
+      const t = ((a & 0x07) << 6) | (b & 0x30);
+      ENSURE(0 < t && t < 0x110); // end of unicode
+      continue;
+    }
+
+    return false;
+  } while (true);
+}
+
 export enum UnicodeSimpleCategory {
   Unknown,
   Letter,

@@ -10,6 +10,7 @@ import {
   findTgURLs,
   findURLs,
   isEmailAddress,
+  parseHTML,
   parseMarkdownV2,
 } from "./match.ts";
 import { MessageEntity } from "./types.ts";
@@ -728,7 +729,7 @@ Deno.test("url", () => {
   check("_.test.com", ["_.test.com"]);
 });
 
-Deno.test("markdown v2", () => {
+Deno.test("parse markdown v2", () => {
   // if the third one isn't passed, then it is considered as a error.
   const check = (text: string, result: string, entities?: MessageEntity[]) => {
     if (entities == null) {
@@ -896,4 +897,193 @@ Deno.test("markdown v2", () => {
     length: 2,
     custom_emoji_id: new CustomEmojiId(25n),
   }]);
+});
+
+Deno.test("parse html", () => {
+  const check = (text: string, result: string, entities?: MessageEntity[]) => {
+    if (entities == null) {
+      try {
+        console.log(parseHTML(text));
+      } catch (err) {
+        assert(err instanceof Error);
+        assertStrictEquals(result, err.message);
+      }
+    } else {
+      const parsed = parseHTML(text);
+      assertStrictEquals(result, parsed.text);
+      assertEquals(entities, parsed.entities);
+    }
+  };
+
+  const invalidSurrogatePairErrorMessage =
+    "Text contains invalid Unicode characters after decoding HTML entities, check for unmatched surrogate code units";
+
+  check("&#57311;", invalidSurrogatePairErrorMessage);
+  check("&#xDFDF;", invalidSurrogatePairErrorMessage);
+  check("&#xDFDF", invalidSurrogatePairErrorMessage);
+  check("🏟 🏟&lt;<abacaba", "Unclosed start tag at byte offset 13");
+  check("🏟 🏟&lt;<abac aba>", 'Unsupported start tag "abac" at byte offset 13');
+  check("🏟 🏟&lt;<abac>", 'Unsupported start tag "abac" at byte offset 13');
+  check("🏟 🏟&lt;<i   =aba>", 'Empty attribute name in the tag "i" at byte offset 13');
+  check(
+    "🏟 🏟&lt;<i    aba>",
+    'Expected equal sign in declaration of an attribute of the tag "i" at byte offset 13',
+  );
+  check("🏟 🏟&lt;<i    aba  =  ", 'Unclosed start tag "i" at byte offset 13');
+  check("🏟 🏟&lt;<i    aba  =  190azAz-.,", "Unexpected end of name token at byte offset 27");
+  check('🏟 🏟&lt;<i    aba  =  "&lt;&gt;&quot;>', "Unclosed start tag at byte offset 13");
+  check("🏟 🏟&lt;<i    aba  =  '&lt;&gt;&quot;>", "Unclosed start tag at byte offset 13");
+  check("🏟 🏟&lt;</", "Unexpected end tag at byte offset 13");
+  check("🏟 🏟&lt;<b></b></", "Unexpected end tag at byte offset 20");
+  check("🏟 🏟&lt;<i>a</i   ", "Unclosed end tag at byte offset 17");
+  check("🏟 🏟&lt;<i>a</em   >", 'Unmatched end tag at byte offset 17, expected "</i>", found "</em>"');
+
+  check("", "", []);
+  check("➡️ ➡️", "➡️ ➡️", []);
+  check("&ge;&lt;&gt;&amp;&quot;&laquo;&raquo;&#12345678;", '&ge;<>&"&laquo;&raquo;&#12345678;', []);
+  check("&Or;", "&Or;", []);
+  check("➡️ ➡️<i>➡️ ➡️</i>", "➡️ ➡️➡️ ➡️", [{ type: "italic", offset: 5, length: 5 }]);
+  check("➡️ ➡️<em>➡️ ➡️</em>", "➡️ ➡️➡️ ➡️", [{ type: "italic", offset: 5, length: 5 }]);
+  check("➡️ ➡️<b>➡️ ➡️</b>", "➡️ ➡️➡️ ➡️", [{ type: "bold", offset: 5, length: 5 }]);
+  check("➡️ ➡️<strong>➡️ ➡️</strong>", "➡️ ➡️➡️ ➡️", [{ type: "bold", offset: 5, length: 5 }]);
+  check("➡️ ➡️<u>➡️ ➡️</u>", "➡️ ➡️➡️ ➡️", [{ type: "underline", offset: 5, length: 5 }]);
+  check("➡️ ➡️<ins>➡️ ➡️</ins>", "➡️ ➡️➡️ ➡️", [{ type: "underline", offset: 5, length: 5 }]);
+  check("➡️ ➡️<s>➡️ ➡️</s>", "➡️ ➡️➡️ ➡️", [{ type: "strikethrough", offset: 5, length: 5 }]);
+  check("➡️ ➡️<strike>➡️ ➡️</strike>", "➡️ ➡️➡️ ➡️", [{ type: "strikethrough", offset: 5, length: 5 }]);
+  check("➡️ ➡️<del>➡️ ➡️</del>", "➡️ ➡️➡️ ➡️", [{ type: "strikethrough", offset: 5, length: 5 }]);
+  check("➡️ ➡️<i>➡️ ➡️</i><b>➡️ ➡️</b>", "➡️ ➡️➡️ ➡️➡️ ➡️", [
+    { type: "italic", offset: 5, length: 5 },
+    { type: "bold", offset: 10, length: 5 },
+  ]);
+  check("🏟 🏟<i>🏟 &lt🏟</i>", "🏟 🏟🏟 <🏟", [{ type: "italic", offset: 5, length: 6 }]);
+  check("🏟 🏟<i>🏟 &gt;<b aba   =   caba>&lt🏟</b></i>", "🏟 🏟🏟 ><🏟", [
+    { type: "italic", offset: 5, length: 7 },
+    { type: "bold", offset: 9, length: 3 },
+  ]);
+  check("🏟 🏟&lt;<i    aba  =  190azAz-.   >a</i>", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
+  check("🏟 🏟&lt;<i    aba  =  190azAz-.>a</i>", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
+  check('🏟 🏟&lt;<i    aba  =  "&lt;&gt;&quot;">a</i>', "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
+  check("🏟 🏟&lt;<i    aba  =  '&lt;&gt;&quot;'>a</i>", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
+  check("🏟 🏟&lt;<i    aba  =  '&lt;&gt;&quot;'>a</>", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
+  check("🏟 🏟&lt;<i>🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [{ type: "italic", offset: 6, length: 6 }]);
+  check("🏟 🏟&lt;<i>a</    >", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
+  check("🏟 🏟&lt;<i>a</i   >", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
+  check("🏟 🏟&lt;<b></b>", "🏟 🏟<", []);
+  check("<i>\t</i>", "\t", [{ type: "italic", offset: 0, length: 1 }]);
+  check("<i>\r</i>", "\r", [{ type: "italic", offset: 0, length: 1 }]);
+  check("<i>\n</i>", "\n", [{ type: "italic", offset: 0, length: 1 }]);
+  check('➡️ ➡️<span class = "tg-spoiler">➡️ ➡️</span><b>➡️ ➡️</b>', "➡️ ➡️➡️ ➡️➡️ ➡️", [
+    { type: "spoiler", offset: 5, length: 5 },
+    { type: "bold", offset: 10, length: 5 },
+  ]);
+  check('🏟 🏟<span class="tg-spoiler">🏟 &lt🏟</span>', "🏟 🏟🏟 <🏟", [{ type: "spoiler", offset: 5, length: 6 }]);
+  check('🏟 🏟<span class="tg-spoiler">🏟 &gt;<b aba   =   caba>&lt🏟</b></span>', "🏟 🏟🏟 ><🏟", [
+    { type: "spoiler", offset: 5, length: 7 },
+    { type: "bold", offset: 9, length: 3 },
+  ]);
+  check("➡️ ➡️<tg-spoiler>➡️ ➡️</tg-spoiler><b>➡️ ➡️</b>", "➡️ ➡️➡️ ➡️➡️ ➡️", [
+    { type: "spoiler", offset: 5, length: 5 },
+    { type: "bold", offset: 10, length: 5 },
+  ]);
+  check("🏟 🏟<tg-spoiler>🏟 &lt🏟</tg-spoiler>", "🏟 🏟🏟 <🏟", [{ type: "spoiler", offset: 5, length: 6 }]);
+  check("🏟 🏟<tg-spoiler>🏟 &gt;<b aba   =   caba>&lt🏟</b></tg-spoiler>", "🏟 🏟🏟 ><🏟", [
+    { type: "spoiler", offset: 5, length: 7 },
+    { type: "bold", offset: 9, length: 3 },
+  ]);
+  check("<a href=telegram.org>\t</a>", "\t", [{
+    type: "text_link",
+    offset: 0,
+    length: 1,
+    url: "http://telegram.org/",
+  }]);
+  check("<a href=telegram.org>\r</a>", "\r", [{
+    type: "text_link",
+    offset: 0,
+    length: 1,
+    url: "http://telegram.org/",
+  }]);
+  check("<a href=telegram.org>\n</a>", "\n", [{
+    type: "text_link",
+    offset: 0,
+    length: 1,
+    url: "http://telegram.org/",
+  }]);
+  check("<code><i><b> </b></i></code><i><b><code> </code></b></i>", "  ", [
+    { type: "code", offset: 0, length: 1 },
+    { type: "bold", offset: 0, length: 1 },
+    { type: "italic", offset: 0, length: 1 },
+    { type: "code", offset: 1, length: 1 },
+    { type: "bold", offset: 1, length: 1 },
+    { type: "italic", offset: 1, length: 1 },
+  ]);
+  check("<i><b> </b> <code> </code></i>", "   ", [
+    { type: "italic", offset: 0, length: 3 },
+    { type: "bold", offset: 0, length: 1 },
+    { type: "code", offset: 2, length: 1 },
+  ]);
+  check("<a href=telegram.org> </a>", " ", [{ type: "text_link", offset: 0, length: 1, url: "http://telegram.org/" }]);
+  check('<a href  ="telegram.org"   > </a>', " ", [{
+    type: "text_link",
+    offset: 0,
+    length: 1,
+    url: "http://telegram.org/",
+  }]);
+  check("<a   href=  'telegram.org'   > </a>", " ", [{
+    type: "text_link",
+    offset: 0,
+    length: 1,
+    url: "http://telegram.org/",
+  }]);
+  check("<a   href=  'telegram.org?&lt;'   > </a>", " ", [{
+    type: "text_link",
+    offset: 0,
+    length: 1,
+    url: "http://telegram.org/?<",
+  }]);
+  check("<a> </a>", " ", []);
+  check("<a>telegram.org </a>", "telegram.org ", []);
+  check("<a>telegram.org</a>", "telegram.org", [{
+    type: "text_link",
+    offset: 0,
+    length: 12,
+    url: "http://telegram.org/",
+  }]);
+  check("<a>https://telegram.org/asdsa?asdasdwe#12e3we</a>", "https://telegram.org/asdsa?asdasdwe#12e3we", [
+    { type: "text_link", offset: 0, length: 42, url: "https://telegram.org/asdsa?asdasdwe#12e3we" },
+  ]);
+  check("🏟 🏟&lt;<pre  >🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [{ type: "pre", offset: 6, length: 6 }]);
+  check("🏟 🏟&lt;<code >🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [{ type: "code", offset: 6, length: 6 }]);
+  check("🏟 🏟&lt;<pre><code>🏟 🏟&lt;</code></>", "🏟 🏟<🏟 🏟<", [
+    { type: "pre", offset: 6, length: 6 },
+    { type: "code", offset: 6, length: 6 },
+  ]);
+  check('🏟 🏟&lt;<pre><code class="language-">🏟 🏟&lt;</code></>', "🏟 🏟<🏟 🏟<", [
+    { type: "pre", offset: 6, length: 6 },
+    { type: "code", offset: 6, length: 6 },
+  ]);
+  check('🏟 🏟&lt;<pre><code class="language-fift">🏟 🏟&lt;</></>', "🏟 🏟<🏟 🏟<", [
+    { type: "pre_code", offset: 6, length: 6, language: "fift" },
+  ]);
+  check('🏟 🏟&lt;<code class="language-fift"><pre>🏟 🏟&lt;</></>', "🏟 🏟<🏟 🏟<", [
+    { type: "pre_code", offset: 6, length: 6, language: "fift" },
+  ]);
+  check('🏟 🏟&lt;<pre><code class="language-fift">🏟 🏟&lt;</> </>', "🏟 🏟<🏟 🏟< ", [
+    { type: "pre", offset: 6, length: 7 },
+    { type: "code", offset: 6, length: 6 },
+  ]);
+  check('🏟 🏟&lt;<pre> <code class="language-fift">🏟 🏟&lt;</></>', "🏟 🏟< 🏟 🏟<", [
+    { type: "pre", offset: 6, length: 7 },
+    { type: "code", offset: 7, length: 6 },
+  ]);
+  check('➡️ ➡️<tg-emoji emoji-id = "12345">➡️ ➡️</tg-emoji><b>➡️ ➡️</b>', "➡️ ➡️➡️ ➡️➡️ ➡️", [
+    { type: "custom_emoji", offset: 5, length: 5, custom_emoji_id: new CustomEmojiId(12345n) },
+    { type: "bold", offset: 10, length: 5 },
+  ]);
+  check('🏟 🏟<tg-emoji emoji-id="54321">🏟 &lt🏟</tg-emoji>', "🏟 🏟🏟 <🏟", [
+    { type: "custom_emoji", offset: 5, length: 6, custom_emoji_id: new CustomEmojiId(54321n) },
+  ]);
+  check('🏟 🏟<b aba   =   caba><tg-emoji emoji-id="1">🏟</tg-emoji>1</b>', "🏟 🏟🏟1", [
+    { type: "bold", offset: 5, length: 3 },
+    { type: "custom_emoji", offset: 5, length: 2, custom_emoji_id: new CustomEmojiId(1n) },
+  ]);
 });

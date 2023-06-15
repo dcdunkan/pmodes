@@ -3,17 +3,21 @@ import { LinkManager } from "./link_manager.ts";
 import { MessageEntity, MessageEntityType } from "./types.ts";
 import { UserId } from "./user_id.ts";
 import {
+  appendUTF8CharacterUnsafe,
   CHECK,
+  checkUTF8,
   convertEntityTypeEnumToString,
   convertEntityTypeEnumToStyledString,
   convertEntityTypeStringToEnum,
   getUnicodeSimpleCategory,
+  hexToInt,
   isAlpha,
   isAlphaDigitOrUnderscore,
   isAlphaDigitUnderscoreOrMinus,
   isAlphaOrDigit,
   isDigit,
   isHashtagLetter,
+  isHexDigit,
   isSpace,
   isUTF8CharacterFirstCodeUnit,
   isWordCharacter,
@@ -2037,4 +2041,323 @@ export function parseMarkdownV2(input: string): FormattedText {
   entities = sortEntities(entities);
 
   return { text: decoder.decode(text.slice(0, resultSize)), entities };
+}
+
+export function decodeHTMLEntity(text: Uint8Array, pos: number) {
+  CHECK(decodeSingle(text[pos]) === "&");
+  let endPos = pos + 1;
+  let res = 0;
+
+  if (decodeSingle(text[pos + 1]) === "#") {
+    endPos++;
+    if (decodeSingle(text[pos + 2]) === "x") {
+      endPos++;
+      while (isHexDigit(decodeSingle(text[endPos]))) {
+        res = res * 16 + hexToInt(decodeSingle(text[endPos++]));
+      }
+    } else {
+      while (isDigit(decodeSingle(text[endPos]))) {
+        res = res * 10 + text[endPos++] - "0".codePointAt(0)!;
+      }
+    }
+    if (res == 0 || res >= 0x10ffff || endPos - pos >= 10) {
+      return 0;
+    }
+  } else {
+    while (isAlpha(decodeSingle(text[endPos]))) {
+      endPos++;
+    }
+    const entity = decoder.decode(text.slice(pos + 1, endPos));
+    if (entity === "lt") {
+      res = encoder.encode("<")[0];
+    } else if (entity === "gt") {
+      res = encoder.encode(">")[0];
+    } else if (entity === "amp") {
+      res = encoder.encode("&")[0];
+    } else if (entity === "quot") {
+      res = encoder.encode('"')[0];
+    } else {
+      return 0;
+    }
+  }
+
+  if (decodeSingle(text[endPos]) === ";") {
+    pos = endPos + 1;
+  } else {
+    pos = endPos;
+  }
+
+  return { res, pos };
+}
+
+export function parseHTML(str_: string) {
+  const text = encoder.encode(str_);
+  const strSize = text.byteLength;
+  let resultEnd = 0;
+  const resultBegin = 0;
+
+  let entities: MessageEntity[] = [];
+  let utf16Offset = 0;
+  let needRecheckUTF8 = false;
+
+  interface EntityInfo {
+    tagName: string;
+    argument: string;
+    entityOffset: number;
+    entityBeginPos: number;
+  }
+
+  const nestedEntities: EntityInfo[] = [];
+
+  for (let i = 0; i < strSize; i++) {
+    const c = decodeSingle(text[i]), c_ = text[i];
+    if (c === "&") {
+      const code = decodeHTMLEntity(text, i);
+      if (code != 0) {
+        i += code.pos;
+        i--;
+        utf16Offset += 1 + (code.res > 0xffff ? 1 : 0);
+        if (code.res >= 0xd800 && code.res <= 0xdfff) {
+          needRecheckUTF8 = true;
+        }
+        resultEnd = appendUTF8CharacterUnsafe(text, resultEnd, code.res);
+        CHECK(resultEnd <= resultBegin + i);
+        continue;
+      }
+    }
+    if (c !== "<") {
+      if (isUTF8CharacterFirstCodeUnit(c_)) {
+        utf16Offset += 1 + (c_ >= 0xf0 ? 1 : 0);
+      }
+      text[resultEnd++] = c_;
+      continue;
+    }
+
+    const beginPos = i++;
+    if (decodeSingle(text[i]) !== "/") {
+      while (!isSpace(decodeSingle(text[i])) && decodeSingle(text[i]) !== ">") {
+        i++;
+      }
+      if (text[i] == 0) {
+        throw new Error("Unclosed start tag at byte offset " + beginPos);
+      }
+
+      const tagName = decoder.decode(text.slice(beginPos + 1, i)).toLowerCase();
+      if (
+        tagName !== "a" && tagName !== "b" && tagName !== "strong" && tagName !== "i" && tagName !== "em" &&
+        tagName !== "s" && tagName !== "strike" && tagName !== "del" && tagName !== "u" && tagName !== "ins" &&
+        tagName !== "tg-spoiler" && tagName !== "tg-emoji" && tagName !== "span" && tagName !== "pre" &&
+        tagName !== "code"
+      ) {
+        throw new Error(`Unsupported start tag "${tagName}" at byte offset ${beginPos}`);
+      }
+
+      let argument = "";
+      while (decodeSingle(text[i]) !== ">") {
+        while (text[i] !== 0 && isSpace(decodeSingle(text[i]))) {
+          i++;
+        }
+        if (decodeSingle(text[i]) === ">") {
+          break;
+        }
+        const attributeBeginPos = i;
+        while (!isSpace(decodeSingle(text[i])) && decodeSingle(text[i]) !== "=") {
+          i++;
+        }
+        const attributeName = decoder.decode(text.slice(attributeBeginPos, i));
+        if (attributeName.length == 0) {
+          throw new Error(`Empty attribute name in the tag "${tagName}" at byte offset ${attributeBeginPos}`);
+        }
+        while (text[i] != 0 && isSpace(decodeSingle(text[i]))) {
+          i++;
+        }
+        if (decodeSingle(text[i]) !== "=") {
+          throw new Error(
+            `Expected equal sign in declaration of an attribute of the tag "${tagName}" at byte offset ${beginPos}`,
+          );
+        }
+        i++;
+        while (text[i] != 0 && isSpace(decodeSingle(text[i]))) {
+          i++;
+        }
+        if (text[i] == 0) {
+          throw new Error(`Unclosed start tag "${tagName}" at byte offset ${beginPos}`);
+        }
+
+        let attributeValue = "";
+        if (decodeSingle(text[i]) !== "'" && decodeSingle(text[i]) !== '"') {
+          const tokenBeginPos = i;
+          while (
+            isAlphaOrDigit(decodeSingle(text[i])) || decodeSingle(text[i]) === "." || decodeSingle(text[i]) === "-"
+          ) {
+            i++;
+          }
+          attributeValue = decoder.decode(text.slice(tokenBeginPos, i)).toLowerCase();
+          if (!isSpace(decodeSingle(text[i])) && decodeSingle(text[i]) !== ">") {
+            throw new Error(`Unexpected end of name token at byte offset ${tokenBeginPos}`);
+          }
+        } else {
+          const endCharacter = text[i++];
+          let attributeEnd = text[i];
+          const attributeBegin = attributeEnd;
+          while (text[i] != endCharacter && text[i] != 0) {
+            if (decodeSingle(text[i]) === "&") {
+              const code = decodeHTMLEntity(text, i);
+              if (code != 0) {
+                attributeEnd = appendUTF8CharacterUnsafe(text, attributeEnd, code.res);
+                continue;
+              }
+            }
+            attributeEnd = text[i++];
+            attributeEnd++;
+          }
+          if (text[i] == endCharacter) {
+            i++;
+          }
+          attributeValue = decoder.decode(text.slice(attributeBegin, attributeEnd));
+        }
+        if (text[i] == 0) {
+          throw new Error("Unclosed start tag at byte offset " + beginPos);
+        }
+
+        if (tagName === "a" && attributeName === "href") {
+          argument = attributeValue;
+        } else if (tagName === "code" && attributeName === "class" && attributeValue.startsWith("language-")) {
+          argument = attributeValue.substring(9);
+        } else if (tagName === "span" && attributeName === "class" && attributeValue.startsWith("tg-")) {
+          argument = attributeValue.substring(3);
+        } else if (tagName === "tg-emoji" && attributeName === "emoji-id") {
+          argument = attributeValue;
+        }
+      }
+
+      if (tagName === "span" && argument !== "spoiler") {
+        throw new Error(`Tag "span" must have class "tg-spoiler" at byte offset ${beginPos}`);
+      }
+
+      nestedEntities.push({
+        tagName,
+        argument,
+        entityOffset: utf16Offset,
+        entityBeginPos: resultEnd - resultBegin,
+      });
+    } else {
+      if (nestedEntities.length == 0) {
+        throw new Error(`Unexpected end tag at byte offset ${beginPos}`);
+      }
+
+      if (!isSpace(decodeSingle(text[i])) && decodeSingle(text[i]) !== ">") {
+        i++;
+      }
+      const endTagName = decoder.decode(text.slice(beginPos + 2, i)).toLowerCase();
+      while (isSpace(decodeSingle(text[i])) && text[i] != 0) {
+        i++;
+      }
+      if (decodeSingle(text[i]) !== ">") {
+        throw new Error(`Unclosed end tag at byte offset ${beginPos}`);
+      }
+
+      const tagName = nestedEntities[nestedEntities.length - 1].tagName;
+      if (endTagName.length != 0 && endTagName !== tagName) {
+        throw new Error(
+          `Unmatched end tag at byte offset ${beginPos}, expected "</${tagName}>, found "</${endTagName}>`,
+        );
+      }
+
+      if (utf16Offset > nestedEntities.at(-1)!.entityOffset) {
+        const entityOffset = nestedEntities.at(-1)!.entityOffset;
+        const entityLength = utf16Offset - entityOffset;
+        if (tagName === "i" || tagName === "em") {
+          entities.push({ type: "italic", offset: entityOffset, length: entityLength });
+        } else if (tagName === "b" || tagName === "strong") {
+          entities.push({ type: "bold", offset: entityOffset, length: entityLength });
+        } else if (tagName === "s" || tagName === "strike" || tagName === "del") {
+          entities.push({ type: "strikethrough", offset: entityOffset, length: entityLength });
+        } else if (tagName === "u" || tagName === "ins") {
+          entities.push({ type: "underline", offset: entityOffset, length: entityLength });
+        } else if (tagName === "tg-spoiler" || (tagName === "span" && nestedEntities.at(-1)!.argument === "spoiler")) {
+          entities.push({ type: "spoiler", offset: entityOffset, length: entityLength });
+        } else if (tagName === "tg-emoji") {
+          const rDocumentId = BigInt(nestedEntities.at(-1)!.argument);
+          if (rDocumentId == 0n) {
+            throw new Error("Invalid custom emoji identifier specified");
+          }
+          entities.push({
+            type: "custom_emoji",
+            offset: entityOffset,
+            length: entityLength,
+            custom_emoji_id: new CustomEmojiId(rDocumentId),
+          });
+        } else if (tagName === "a") {
+          let url = nestedEntities.at(-1)!.argument;
+          if (url.length == 0) {
+            url = decoder.decode(text.slice(nestedEntities.at(-1)!.entityBeginPos, resultEnd));
+          }
+          const userId = LinkManager.getLinkUserId(url);
+          if (userId.isValid()) {
+            entities.push({ type: "text_mention", offset: entityOffset, length: entityLength, user_id: userId });
+          } else {
+            url = LinkManager.getCheckedLink(url);
+            if (url.length != 0) {
+              entities.push({ type: "text_link", offset: entityOffset, length: entityLength, url });
+            }
+          }
+        } else if (tagName === "pre") {
+          const last = entities[entities.length - 1];
+          if (
+            entities.length != 0 && last.type === "code" && last.offset == entityOffset &&
+            last.length == entityLength && "language" in last && typeof last.language === "string" &&
+            last.language.length != 0
+          ) {
+            entities[entities.length - 1].type = "pre_code";
+          } else {
+            entities.push({ type: "pre", offset: entityOffset, length: entityLength });
+          }
+        } else if (tagName === "code") {
+          const last = entities[entities.length - 1];
+          if (
+            entities.length != 0 && last.type === "pre" && last.offset == entityOffset && last.length == entityLength &&
+            nestedEntities.at(-1)!.argument.length != 0
+          ) {
+            entities[entities.length - 1].type = "pre_code";
+            (entities[entities.length - 1] as MessageEntity.PreMessageEntity).language =
+              nestedEntities.at(-1)!.argument;
+          } else {
+            entities.push({
+              type: "code",
+              offset: entityOffset,
+              length: entityLength,
+              // @ts-ignore it is how it is.
+              argument: nestedEntities.at(-1)!.argument,
+            });
+          }
+        } else {
+          unreachable();
+        }
+      }
+      nestedEntities.pop();
+    }
+  }
+
+  if (nestedEntities.length != 0) {
+    throw new Error(`Can't find end tag corresponding to start tag ${nestedEntities.at(-1)!.tagName}`);
+  }
+
+  for (const entity of entities) {
+    if (entity.type === "code" && "argument" in entity) {
+      delete entity.argument;
+    }
+  }
+
+  entities = sortEntities(entities);
+
+  const finalString = decoder.decode(text.slice(0, resultEnd));
+
+  if (needRecheckUTF8 && !checkUTF8(finalString)) {
+    throw new Error(
+      "Text contains invalid Unicode characters after decoding HTML entities, check for unmatched surrogate code units",
+    );
+  }
+
+  return { text: finalString, entities };
 }
