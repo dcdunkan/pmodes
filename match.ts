@@ -1604,19 +1604,24 @@ export function getFirstUrl({ text, entities }: FormattedText) {
   return "";
 }
 
-export function parseMarkdown(text_: string): FormattedText {
-  const text = text_.split("");
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+function decodeSingle(data: number) {
+  return decoder.decode(new Uint8Array([data]));
+}
+
+export function parseMarkdown(input: string): FormattedText {
+  const text = encoder.encode(input);
   let resultSize = 0;
   const entities: MessageEntity[] = [];
   const size = text.length;
   let offset = 0;
 
   for (let i = 0; i < size; i++) {
-    const c = text[i], next = text[i + 1];
-    if (
-      c === "\\" &&
-      (next === "_" || next === "*" || next === "`" || next === "[")
-    ) {
+    const c = decodeSingle(text[i]),
+      codepoint = text[i],
+      next = decodeSingle(text[i + 1]);
+    if (c === "\\" && (next === "_" || next === "*" || next === "`" || next === "[")) {
       i++;
       text[resultSize++] = text[i];
       offset++;
@@ -1624,40 +1629,38 @@ export function parseMarkdown(text_: string): FormattedText {
     }
 
     if (c !== "_" && c !== "*" && c !== "`" && c !== "[") {
-      if (isUTF8CharacterFirstCodeUnit(c.codePointAt(0)!)) {
-        offset += 1 + ((c.codePointAt(0)! >= 0xf0) ? 1 : 0);
+      if (isUTF8CharacterFirstCodeUnit(codepoint)) {
+        offset += 1 + ((codepoint >= 0xf0) ? 1 : 0);
       }
       text[resultSize++] = text[i];
       continue;
     }
 
     const beginPos = i;
-    let endCharacter = text[i];
+    let endCharacter = decodeSingle(text[i]);
     let isPre = false;
     if (c === "[") endCharacter = "]";
 
     i++;
 
     let language: string | undefined = undefined;
-    if (c === "`" && text[i] === "`" && text[i + 1] === "`") {
+    if (c === "`" && decodeSingle(text[i]) === "`" && decodeSingle(text[i + 1]) === "`") {
       i += 2;
       isPre = true;
       let languageEnd = i;
 
-      while (!isSpace(text[languageEnd]) && text[languageEnd] != "`") {
+      while (!isSpace(decodeSingle(text[languageEnd])) && decodeSingle(text[languageEnd]) != "`") {
         languageEnd++;
       }
 
-      if (i != languageEnd && languageEnd < size && text[languageEnd] != "`") {
-        language = text.slice(i, languageEnd).join("");
+      if (i != languageEnd && languageEnd < size && decodeSingle(text[languageEnd]) != "`") {
+        language = decoder.decode(text.slice(i, languageEnd));
         i = languageEnd;
       }
 
-      if (text[i] === "\n" || text[i] === "\r") {
-        if (
-          (text[i + 1] === "\n" || text[i + 1] === "\r") &&
-          text[i] != text[i + 1]
-        ) {
+      const current = decodeSingle(text[i]), next = decodeSingle(text[i + 1]);
+      if (current === "\n" || current === "\r") {
+        if ((next === "\n" || next === "\r") && current != next) {
           i += 2;
         } else {
           i++;
@@ -1668,20 +1671,18 @@ export function parseMarkdown(text_: string): FormattedText {
     const entityOffset = offset;
     while (
       i < size &&
-      (text[i] !== endCharacter ||
-        (isPre && !(text[i + 1] === "`" && text[i + 2] === "`")))
+      (decodeSingle(text[i]) !== endCharacter ||
+        (isPre && !(decodeSingle(text[i + 1]) === "`" && decodeSingle(text[i + 2]) === "`")))
     ) {
       const curCh = text[i];
-      if (isUTF8CharacterFirstCodeUnit(curCh.codePointAt(0)!)) {
-        offset += 1 + (curCh.codePointAt(0)! >= 0xf0 ? 1 : 0);
+      if (isUTF8CharacterFirstCodeUnit(curCh)) {
+        offset += 1 + (curCh >= 0xf0 ? 1 : 0);
       }
       text[resultSize++] = text[i++];
     }
 
     if (i == size) {
-      throw new Error(
-        "Can't find end of the entity starting at byte offset " + beginPos,
-      );
+      throw new Error("Can't find end of the entity starting at byte offset " + beginPos);
     }
 
     if (entityOffset != offset) {
@@ -1703,12 +1704,12 @@ export function parseMarkdown(text_: string): FormattedText {
           break;
         case "[": {
           let url = "";
-          if (text[i + 1] !== "(") {
-            url = text.slice(beginPos + 1, i).join("");
+          if (decodeSingle(text[i + 1]) !== "(") {
+            url = decoder.decode(text.slice(beginPos + 1, i));
           } else {
             i += 2;
-            while (i < size && text[i] !== ")") {
-              url += text[i++];
+            while (i < size && decodeSingle(text[i]) !== ")") {
+              url += decodeSingle(text[i++]);
             }
           }
           const userId = LinkManager.getLinkUserId(url);
@@ -1764,7 +1765,7 @@ export function parseMarkdown(text_: string): FormattedText {
     if (isPre) i += 2;
   }
 
-  return { text: text.slice(0, resultSize).join(""), entities };
+  return { text: decoder.decode(text.slice(0, resultSize)), entities };
 }
 
 export interface EntityInfo {
@@ -1775,13 +1776,7 @@ export interface EntityInfo {
   entityBeginPos: number;
 }
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-function decodeSingle(data: number) {
-  return decoder.decode(new Uint8Array([data]));
-}
-
-export function parseMarkdownV2(input: string) {
+export function parseMarkdownV2(input: string): FormattedText {
   const text = encoder.encode(input);
   let resultSize = 0;
   let entities: MessageEntity[] = [];
