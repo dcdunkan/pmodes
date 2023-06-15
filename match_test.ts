@@ -1,3 +1,4 @@
+import { CustomEmojiId } from "./custom_emoji_id.ts";
 import { assert, assertEquals, assertStrictEquals } from "./deps_test.ts";
 import {
   findBankCardNumbers,
@@ -12,6 +13,7 @@ import {
   parseMarkdownV2,
 } from "./match.ts";
 import { MessageEntity } from "./types.ts";
+import { UserId } from "./user_id.ts";
 
 function checkFn(fn: (text: string) => [number, number][]) {
   return (text: string, expected: string[]) => {
@@ -789,4 +791,109 @@ Deno.test("markdown v2", () => {
   check("🏟 🏟![👍](tg://emoji#test)", "Custom emoji URL must have an emoji identifier");
   check("🏟 🏟![👍](tg://emoji?test=1#&id=25)", "Custom emoji URL must have an emoji identifier");
   check("🏟 🏟![👍](tg://emoji?test=1231&id=025)", "Invalid custom emoji identifier specified");
+
+  check("", "", []);
+  check("\\\\", "\\", []);
+  check("\\\\\\", "\\\\", []);
+  check("\\\\\\\\\\_\\*\\`", "\\\\_*`", []);
+  check("➡️ ➡️", "➡️ ➡️", []);
+  check("🏟 🏟``", "🏟 🏟", []);
+  check("🏟 🏟_abac \\* asd _", "🏟 🏟abac * asd ", [{ type: "italic", offset: 5, length: 11 }]);
+  check("🏟 \\.🏟_🏟\\. 🏟_", "🏟 .🏟🏟. 🏟", [{ type: "italic", offset: 6, length: 6 }]);
+  check("\\\\\\a\\b\\c\\d\\e\\f\\1\\2\\3\\4\\➡️\\", "\\abcdef1234\\➡️\\", []);
+  check("➡️ ➡️_➡️ ➡️_", "➡️ ➡️➡️ ➡️", [{ type: "italic", offset: 5, length: 5 }]);
+  check("➡️ ➡️_➡️ ➡️_*➡️ ➡️*", "➡️ ➡️➡️ ➡️➡️ ➡️", [{ type: "italic", offset: 5, length: 5 }, {
+    type: "bold",
+    offset: 10,
+    length: 5,
+  }]);
+  check("🏟 🏟_🏟 \\.🏟_", "🏟 🏟🏟 .🏟", [{ type: "italic", offset: 5, length: 6 }]);
+  check("🏟 🏟_🏟 *🏟*_", "🏟 🏟🏟 🏟", [{ type: "italic", offset: 5, length: 5 }, { type: "bold", offset: 8, length: 2 }]);
+  check("🏟 🏟_🏟 __🏟___", "🏟 🏟🏟 🏟", [{ type: "italic", offset: 5, length: 5 }, {
+    type: "underline",
+    offset: 8,
+    length: 2,
+  }]);
+  check("🏟 🏟__🏟 _🏟_ __", "🏟 🏟🏟 🏟 ", [{ type: "underline", offset: 5, length: 6 }, {
+    type: "italic",
+    offset: 8,
+    length: 2,
+  }]);
+  check("🏟 🏟__🏟 _🏟_\\___", "🏟 🏟🏟 🏟_", [{ type: "underline", offset: 5, length: 6 }, {
+    type: "italic",
+    offset: 8,
+    length: 2,
+  }]);
+  check("🏟 🏟`🏟 🏟```", "🏟 🏟🏟 🏟", [{ type: "code", offset: 5, length: 5 }]);
+  check("🏟 🏟```🏟 🏟```", "🏟 🏟 🏟", [{ type: "pre_code", offset: 5, length: 3, language: "🏟" }]);
+  check("🏟 🏟```🏟\n🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: "🏟" }]);
+  check("🏟 🏟```🏟\r🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: "🏟" }]);
+  check("🏟 🏟```🏟\n\r🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: "🏟" }]);
+  check("🏟 🏟```🏟\r\n🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: "🏟" }]);
+  check("🏟 🏟```🏟\n\n🏟```", "🏟 🏟\n🏟", [{ type: "pre_code", offset: 5, length: 3, language: "🏟" }]);
+  check("🏟 🏟```🏟\r\r🏟```", "🏟 🏟\r🏟", [{ type: "pre_code", offset: 5, length: 3, language: "🏟" }]);
+  check("🏟 🏟```🏟 \\\\\\`🏟```", "🏟 🏟 \\`🏟", [{ type: "pre_code", offset: 5, length: 5, language: "🏟" }]);
+  check("🏟 🏟**", "🏟 🏟", []);
+  check("||test||", "test", [{ type: "spoiler", offset: 0, length: 4 }]);
+  check("🏟 🏟``", "🏟 🏟", []);
+  check("🏟 🏟``````", "🏟 🏟", []);
+  check("🏟 🏟____", "🏟 🏟", []);
+  check("`_* *_`__*` `*__", "_* *_ ", [
+    { type: "code", offset: 0, length: 5 },
+    { type: "code", offset: 5, length: 1 },
+    { type: "bold", offset: 5, length: 1 },
+    { type: "underline", offset: 5, length: 1 },
+  ]);
+  check("_* * ` `_", "   ", [
+    { type: "italic", offset: 0, length: 3 },
+    { type: "bold", offset: 0, length: 1 },
+    { type: "code", offset: 2, length: 1 },
+  ]);
+  check("[](telegram.org)", "", []);
+  check("[ ](telegram.org)", " ", [{ type: "text_link", offset: 0, length: 1, url: "http://telegram.org/" }]);
+  check("[ ](as)", " ", []);
+  check("[telegram\\.org]", "telegram.org", [{
+    type: "text_link",
+    offset: 0,
+    length: 12,
+    url: "http://telegram.org/",
+  }]);
+  check("[telegram\\.org]a", "telegram.orga", [{
+    type: "text_link",
+    offset: 0,
+    length: 12,
+    url: "http://telegram.org/",
+  }]);
+  check("[telegram\\.org](telegram.dog)", "telegram.org", [{
+    type: "text_link",
+    offset: 0,
+    length: 12,
+    url: "http://telegram.dog/",
+  }]);
+  check("[telegram\\.org](https://telegram.dog?)", "telegram.org", [{
+    type: "text_link",
+    offset: 0,
+    length: 12,
+    url: "https://telegram.dog/?",
+  }]);
+  check("[telegram\\.org](https://telegram.dog?\\\\\\()", "telegram.org", [{
+    type: "text_link",
+    offset: 0,
+    length: 12,
+    url: "https://telegram.dog/?\\(",
+  }]);
+  check("[telegram\\.org]()", "telegram.org", []);
+  check("[telegram\\.org](asdasd)", "telegram.org", []);
+  check("[telegram\\.org](tg:user?id=123456)", "telegram.org", [{
+    type: "text_mention",
+    offset: 0,
+    length: 12,
+    user_id: new UserId(123456n),
+  }]);
+  check("🏟 🏟![👍](TG://EMoJI/?test=1231&id=25#id=32)a", "🏟 🏟👍a", [{
+    type: "custom_emoji",
+    offset: 5,
+    length: 2,
+    custom_emoji_id: new CustomEmojiId(25n),
+  }]);
 });

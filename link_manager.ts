@@ -92,8 +92,8 @@ export class LinkManager {
   static getCheckedLink(link: string, httpOnly = false, httpsOnly = false): string {
     try {
       return this.checkLinkImpl(link, httpOnly, httpsOnly);
-    } catch (error) {
-      console.error(error);
+    } catch (_error) {
+      // console.error(error);
       return "";
     }
   }

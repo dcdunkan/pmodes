@@ -1147,7 +1147,7 @@ export function sortEntities(entities: MessageEntity[]) {
       return offset < other.offset ? -1 : 1;
     }
     if (length != other.length) {
-      return length > other.length ? 1 : -1;
+      return length > other.length ? -1 : 1;
     }
     const priority = getTypePriority(convertEntityTypeStringToEnum(type));
     const otherPriority = getTypePriority(
