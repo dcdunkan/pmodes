@@ -1,4 +1,4 @@
-import { assertEquals } from "./deps_test.ts";
+import { assert, assertEquals, assertStrictEquals } from "./deps_test.ts";
 import {
   findBankCardNumbers,
   findBotCommands,
@@ -9,7 +9,9 @@ import {
   findTgURLs,
   findURLs,
   isEmailAddress,
+  parseMarkdownV2,
 } from "./match.ts";
+import { MessageEntity } from "./types.ts";
 
 function checkFn(fn: (text: string) => [number, number][]) {
   return (text: string, expected: string[]) => {
@@ -722,4 +724,69 @@ Deno.test("url", () => {
   check("test_.com", []);
   check("_test.com", []);
   check("_.test.com", ["_.test.com"]);
+});
+
+Deno.test("markdown v2", () => {
+  // if the third one isn't passed, then it is considered as a error.
+  const check = (text: string, result: string, entities?: MessageEntity[]) => {
+    if (entities == null) {
+      try {
+        parseMarkdownV2(text);
+      } catch (err) {
+        assert(err instanceof Error);
+        assertStrictEquals(result, err.message);
+      }
+    } else {
+      const parsed = parseMarkdownV2(text);
+      assertStrictEquals(result, parsed.text);
+      assertEquals(entities, parsed.entities);
+    }
+  };
+
+  const reservedCharacters = ["]", "(", ")", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"];
+  const beginCharacters = ["_", "*", "[", "~", "`"];
+
+  for (let codepoint = 1; codepoint < 126; codepoint++) {
+    const char = String.fromCodePoint(codepoint);
+    if (beginCharacters.includes(char)) {
+      continue;
+    }
+    const text = char;
+    if (!reservedCharacters.includes(char)) {
+      check(text, text, []);
+    } else {
+      check(text, `Character '${char}' is reserved and must be escaped with the preceding '\\'`);
+      const escapedText = "\\" + text;
+      check(escapedText, text, []);
+    }
+  }
+
+  check("🏟 🏟_abacaba", "Can't find end of Italic entity at byte offset 9");
+  check("🏟 🏟_abac * asd ", "Can't find end of Bold entity at byte offset 15");
+  check("🏟 🏟_abac * asd _", "Can't find end of Italic entity at byte offset 21");
+  check("🏟 🏟`", "Can't find end of Code entity at byte offset 9");
+  check("🏟 🏟```", "Can't find end of Pre entity at byte offset 9");
+  check("🏟 🏟```a", "Can't find end of Pre entity at byte offset 9");
+  check("🏟 🏟```a ", "Can't find end of PreCode entity at byte offset 9");
+  check("🏟 🏟__🏟 🏟_", "Can't find end of Italic entity at byte offset 20");
+  check("🏟 🏟_🏟 🏟__", "Can't find end of Underline entity at byte offset 19");
+  check("🏟 🏟```🏟 🏟`", "Can't find end of Code entity at byte offset 21");
+  check("🏟 🏟```🏟 🏟_", "Can't find end of PreCode entity at byte offset 9");
+  check("🏟 🏟```🏟 🏟\\`", "Can't find end of PreCode entity at byte offset 9");
+  check("[telegram\\.org](asd\\)", "Can't find end of a URL at byte offset 16");
+  check("[telegram\\.org](", "Can't find end of a URL at byte offset 16");
+  check("[telegram\\.org](asd", "Can't find end of a URL at byte offset 16");
+  check("🏟 🏟__🏟 _🏟___", "Can't find end of Italic entity at byte offset 23");
+  check("🏟 🏟__", "Can't find end of Underline entity at byte offset 9");
+  check("🏟 🏟||test\\|", "Can't find end of Spoiler entity at byte offset 9");
+  check("🏟 🏟!", "Character '!' is reserved and must be escaped with the preceding '\\'");
+  check("🏟 🏟![", "Can't find end of CustomEmoji entity at byte offset 9");
+  check("🏟 🏟![👍", "Can't find end of CustomEmoji entity at byte offset 9");
+  check("🏟 🏟![👍]", "Custom emoji entity must contain a tg://emoji URL");
+  check("🏟 🏟![👍](tg://emoji?id=1234", "Can't find end of a custom emoji URL at byte offset 17");
+  check("🏟 🏟![👍](t://emoji?id=1234)", "Custom emoji URL must have scheme tg");
+  check("🏟 🏟![👍](tg:emojis?id=1234)", 'Custom emoji URL must have host "emoji"');
+  check("🏟 🏟![👍](tg://emoji#test)", "Custom emoji URL must have an emoji identifier");
+  check("🏟 🏟![👍](tg://emoji?test=1#&id=25)", "Custom emoji URL must have an emoji identifier");
+  check("🏟 🏟![👍](tg://emoji?test=1231&id=025)", "Invalid custom emoji identifier specified");
 });

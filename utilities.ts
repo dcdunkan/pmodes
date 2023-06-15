@@ -196,3 +196,54 @@ export function convertEntityTypeEnumToString(
       throw new Error("UNREACHABLE");
   }
 }
+
+export function convertEntityTypeEnumToStyledString(
+  type: MessageEntityType,
+): string {
+  switch (type) {
+    case MessageEntityType.Mention:
+      return "Mention";
+    case MessageEntityType.Hashtag:
+      return "Hashtag";
+    case MessageEntityType.BotCommand:
+      return "BotCommand";
+    case MessageEntityType.Url:
+      return "URL";
+    case MessageEntityType.EmailAddress:
+      return "Email";
+    case MessageEntityType.Bold:
+      return "Bold";
+    case MessageEntityType.Italic:
+      return "Italic";
+    case MessageEntityType.Code:
+      return "Code";
+    case MessageEntityType.Pre:
+      return "Pre";
+    case MessageEntityType.PreCode:
+      return "PreCode";
+    case MessageEntityType.TextUrl:
+      return "TextLink";
+    case MessageEntityType.MentionName:
+      return "TextMention";
+    case MessageEntityType.Cashtag:
+      return "Cashtag";
+    case MessageEntityType.PhoneNumber:
+      return "PhoneNumber";
+    case MessageEntityType.Underline:
+      return "Underline";
+    case MessageEntityType.Strikethrough:
+      return "Strikethrough";
+    case MessageEntityType.Blockquote:
+      return "Blockquote";
+    case MessageEntityType.BankCardNumber:
+      return "BankCardNumber";
+    case MessageEntityType.MediaTimestamp:
+      return "MediaTimestamp";
+    case MessageEntityType.Spoiler:
+      return "Spoiler";
+    case MessageEntityType.CustomEmoji:
+      return "CustomEmoji";
+    default:
+      throw new Error("UNREACHABLE");
+  }
+}

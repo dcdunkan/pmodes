@@ -5,6 +5,7 @@ import { UserId } from "./user_id.ts";
 import {
   CHECK,
   convertEntityTypeEnumToString,
+  convertEntityTypeEnumToStyledString,
   convertEntityTypeStringToEnum,
   getUnicodeSimpleCategory,
   isAlpha,
@@ -1604,7 +1605,7 @@ export function getFirstUrl({ text, entities }: FormattedText) {
 }
 
 export function parseMarkdown(text_: string): FormattedText {
-  const text = [...text_];
+  const text = text_.split("");
   let resultSize = 0;
   const entities: MessageEntity[] = [];
   const size = text.length;
@@ -1774,8 +1775,14 @@ export interface EntityInfo {
   entityBeginPos: number;
 }
 
-export function parseMarkdownV2(text_: string) {
-  const text = [...text_];
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+function decodeSingle(data: number) {
+  return decoder.decode(new Uint8Array([data]));
+}
+
+export function parseMarkdownV2(input: string) {
+  const text = encoder.encode(input);
   let resultSize = 0;
   let entities: MessageEntity[] = [];
   let utf16Offset = 0;
@@ -1783,8 +1790,11 @@ export function parseMarkdownV2(text_: string) {
   const nestedEntities: EntityInfo[] = [];
 
   for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (c === "\\" && text[i + 1].codePointAt(0)! > 0 && text[i + 1].codePointAt(0)! <= 126) {
+    const c = decodeSingle(text[i]), codepoint = text[i];
+    if (
+      c === "\\" &&
+      text[i + 1] != null && text[i + 1] > 0 && text[i + 1] <= 126
+    ) {
       i++;
       utf16Offset += 1;
       text[resultSize++] = text[i];
@@ -1804,9 +1814,9 @@ export function parseMarkdownV2(text_: string) {
       }
     }
 
-    if (!reservedCharacters.includes(text[i])) {
-      if (isUTF8CharacterFirstCodeUnit(c.codePointAt(0)!)) {
-        utf16Offset += 1 + (c.codePointAt(0)! >= 0xf0 ? 1 : 0);
+    if (!reservedCharacters.includes(c)) {
+      if (isUTF8CharacterFirstCodeUnit(codepoint)) {
+        utf16Offset += 1 + (codepoint >= 0xf0 ? 1 : 0);
       }
       text[resultSize++] = text[i];
       continue;
@@ -1815,24 +1825,25 @@ export function parseMarkdownV2(text_: string) {
     let isEndOfAnEntity = false;
     if (nestedEntities.length != 0) {
       isEndOfAnEntity = (() => {
+        const nextChar = decodeSingle(text[i + 1]);
         switch (nestedEntities[nestedEntities.length - 1].type) {
           case MessageEntityType.Bold:
             return c === "*";
           case MessageEntityType.Italic:
-            return c === "_" && text[i + 1] !== "_";
+            return c === "_" && nextChar !== "_";
           case MessageEntityType.Code:
             return c === "`";
           case MessageEntityType.Pre:
           case MessageEntityType.PreCode:
-            return c === "`" && text[i + 1] === "`" && text[i + 2] === "`";
+            return c === "`" && nextChar === "`" && decodeSingle(text[i + 2]) === "`";
           case MessageEntityType.TextUrl:
             return c === "]";
           case MessageEntityType.Underline:
-            return c === "_" && text[i + 1] === "_";
+            return c === "_" && nextChar === "_";
           case MessageEntityType.Strikethrough:
             return c === "~";
           case MessageEntityType.Spoiler:
-            return c === "|" && text[i + 1] === "|";
+            return c === "|" && nextChar === "|";
           case MessageEntityType.CustomEmoji:
             return c === "]";
           default:
@@ -1845,10 +1856,11 @@ export function parseMarkdownV2(text_: string) {
       let type: MessageEntityType;
       let argument = "";
       const entityByteOffset = i;
+      const nextChar = decodeSingle(text[i + 1]);
 
       switch (c) {
         case "_":
-          if (text[i + 1] === "_") {
+          if (nextChar === "_") {
             type = MessageEntityType.Underline;
             i++;
           } else {
@@ -1862,31 +1874,32 @@ export function parseMarkdownV2(text_: string) {
           type = MessageEntityType.Strikethrough;
           break;
         case "|":
-          if (text[i + 1] === "|") {
+          if (nextChar === "|") {
             i++;
             type = MessageEntityType.Spoiler;
           } else {
-            throw new Error(`Character '${text[i]}' is reserved and must be escaped with the preceding '\\'`);
+            throw new Error(`Character '${c}' is reserved and must be escaped with the preceding '\\'`);
           }
           break;
         case "[":
           type = MessageEntityType.TextUrl;
           break;
         case "`":
-          if (text[i + 1] === "`" && text[i + 2] === "`") {
+          if (nextChar === "`" && decodeSingle(text[i + 2]) === "`") {
             i += 3;
             type = MessageEntityType.Pre;
             let languageEnd = i;
-            while (!isSpace(text[languageEnd]) && text[languageEnd] !== "`") {
+            while (!isSpace(decodeSingle(text[languageEnd])) && decodeSingle(text[languageEnd]) !== "`") {
               languageEnd++;
             }
-            if (i != languageEnd && languageEnd < text.length && text[languageEnd] !== "`") {
+            if (i != languageEnd && languageEnd < text.length && decodeSingle(text[languageEnd]) !== "`") {
               type = MessageEntityType.PreCode;
-              argument = text.slice(i, languageEnd).join("");
+              argument = decoder.decode(text.slice(i, languageEnd));
               i = languageEnd;
             }
-            if (text[i] === "\n" || text[i] === "\r") {
-              if ((text[i + 1] === "\n" || text[i + 1] === "\r") && text[i] !== text[i + 1]) {
+            const current = decodeSingle(text[i]), next = decodeSingle(text[i + 1]);
+            if (current === "\n" || current === "\r") {
+              if ((next === "\n" || next === "\r") && current !== next) {
                 i += 2;
               } else {
                 i++;
@@ -1899,16 +1912,17 @@ export function parseMarkdownV2(text_: string) {
           }
           break;
         case "!":
-          if (text[i + 1] === "[") {
+          if (nextChar === "[") {
             i++;
             type = MessageEntityType.CustomEmoji;
           } else {
-            throw new Error(`Character '${text[i]}' is reserved and must be escaped with the preceding '\\'`);
+            throw new Error(`Character '${c}' is reserved and must be escaped with the preceding '\\'`);
           }
           break;
         default:
-          throw new Error(`Character '${text[i]}' is reserved and must be escaped with the preceding '\\'`);
+          throw new Error(`Character '${c}' is reserved and must be escaped with the preceding '\\'`);
       }
+
       nestedEntities.push({ type, argument, entityOffset: utf16Offset, entityByteOffset, entityBeginPos: resultSize });
     } else {
       let { type, argument } = nestedEntities[nestedEntities.length - 1];
@@ -1931,20 +1945,20 @@ export function parseMarkdownV2(text_: string) {
           break;
         case MessageEntityType.TextUrl: {
           let url = "";
-          if (text[i + 1] !== "(") {
-            url = text.slice(nestedEntities.at(-1)!.entityBeginPos, resultSize).join("");
+          if (decodeSingle(text[i + 1]) !== "(") {
+            url = decoder.decode(text.slice(nestedEntities.at(-1)!.entityBeginPos, resultSize));
           } else {
             i += 2;
             const urlBeginPos = i;
-            while (i < text.length && text[i] !== ")") {
-              if (text[i] === "\\" && text[i + 1].codePointAt(0)! > 0 && text[i + 1].codePointAt(0)! <= 126) {
-                url += text[i + 1];
+            while (i < text.length && decodeSingle(text[i]) !== ")") {
+              if (decodeSingle(text[i]) === "\\" && text[i + 1] > 0 && text[i + 1] <= 126) {
+                url += decodeSingle(text[i + 1]);
                 i += 2;
                 continue;
               }
-              url += text[i++];
+              url += decodeSingle(text[i++]);
             }
-            if (text[i] !== ")") {
+            if (decodeSingle(text[i]) !== ")") {
               throw new Error("Can't find end of a URL at byte offset " + urlBeginPos);
             }
           }
@@ -1960,21 +1974,21 @@ export function parseMarkdownV2(text_: string) {
           break;
         }
         case MessageEntityType.CustomEmoji: {
-          if (text[i + 1] !== "(") {
+          if (decodeSingle(text[i + 1]) !== "(") {
             throw new Error("Custom emoji entity must contain a tg://emoji URL");
           }
           i += 2;
           let url = "";
           const urlBeginPos = i;
-          while (i < text.length && text[i] !== ")") {
-            if (text[i] === "\\" && text[i + 1].codePointAt(0)! > 0 && text[i + 1].codePointAt(0)! <= 126) {
-              url += text[i + 1];
+          while (i < text.length && decodeSingle(text[i]) !== ")") {
+            if (decodeSingle(text[i]) === "\\" && text[i + 1] > 0 && text[i + 1] <= 126) {
+              url += decodeSingle(text[i + 1]);
               i += 2;
               continue;
             }
-            url += text[i++];
+            url += decodeSingle(text[i++]);
           }
-          if (text[i] !== ")") {
+          if (decodeSingle(text[i]) !== ")") {
             throw new Error("Can't find end of a custom emoji URL at byte offset " + urlBeginPos);
           }
           customEmojiId = LinkManager.getLinkCustomEmojiId(url);
@@ -1997,9 +2011,6 @@ export function parseMarkdownV2(text_: string) {
             custom_emoji_id: customEmojiId,
           });
         } else {
-          if (type == MessageEntityType.Bold) {
-            console.log(utf16Offset, entityOffset);
-          }
           const entity: MessageEntity = {
             ...(
               type === MessageEntityType.TextUrl
@@ -2022,11 +2033,13 @@ export function parseMarkdownV2(text_: string) {
   if (nestedEntities.length != 0) {
     const last = nestedEntities[nestedEntities.length - 1];
     throw new Error(
-      `Can't find end of ${convertEntityTypeEnumToString(last.type)} entity at byte offset ${last.entityByteOffset}`,
+      `Can't find end of ${
+        convertEntityTypeEnumToStyledString(last.type)
+      } entity at byte offset ${last.entityByteOffset}`,
     );
   }
 
   entities = sortEntities(entities);
 
-  return { text: text.slice(0, resultSize).join(""), entities };
+  return { text: decoder.decode(text.slice(0, resultSize)), entities };
 }
