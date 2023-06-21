@@ -9,6 +9,7 @@ import {
   convertEntityTypeEnumToString,
   convertEntityTypeEnumToStyledString,
   convertEntityTypeStringToEnum,
+  ENCODED,
   getUnicodeSimpleCategory,
   hexToInt,
   isAlpha,
@@ -22,94 +23,118 @@ import {
   isUTF8CharacterFirstCodeUnit,
   isWordCharacter,
   LOG_CHECK,
+  nextUtf8Unsafe,
+  prevUtf8Unsafe,
   UnicodeSimpleCategory,
 } from "./utilities.ts";
 import { equal, unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
 
 export type Position = [number, number];
 
-export function matchMentions(str: string): Position[] {
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+function decodeSingle(data: number) {
+  return decoder.decode(new Uint8Array([data]));
+}
+
+function encode(data: string) {
+  return encoder.encode(data);
+}
+
+export function matchMentions(text: string): Position[] {
+  const str = encode(text);
   const result: Position[] = [];
   const begin = 0, end = str.length;
-  let pos = begin;
+  let position = begin;
 
-  while (pos < end) {
-    const atSymbol = str.substring(pos).indexOf("@");
+  while (true) {
+    const atSymbol = str.slice(position).indexOf(ENCODED["@"]);
     if (atSymbol == -1) break;
-    pos += atSymbol;
+    position += atSymbol;
 
-    if (pos != begin && isWordCharacter(str.codePointAt(pos - 1)!)) {
-      pos++;
-      continue;
+    if (position != begin) {
+      const prevPos = prevUtf8Unsafe(str, position);
+      const { code: prev, pos } = nextUtf8Unsafe(str, prevPos);
+      position = pos;
+      if (isWordCharacter(prev)) {
+        position++;
+        continue;
+      }
     }
-    const mentionBegin = ++pos;
-    while (pos != end && isAlphaDigitOrUnderscore(str[pos])) {
-      pos++;
+    const mentionBegin = ++position;
+    while (position != end && isAlphaDigitOrUnderscore(decodeSingle(str[position]))) {
+      position++;
     }
-    const mentionEnd = pos;
+    const mentionEnd = position;
     const size = mentionEnd - mentionBegin;
     if (size < 2 || size > 32) continue;
-    if (isWordCharacter(str.codePointAt(pos)!)) continue;
+
+    let next = 0;
+    if (position != end) {
+      const { pos, code } = nextUtf8Unsafe(str, position);
+      position = pos, next = code;
+    }
+
+    if (isWordCharacter(next)) continue;
     result.push([mentionBegin - 1, mentionEnd]);
   }
 
   return result;
 }
 
-export function matchBotCommands(str: string): Position[] {
+export function matchBotCommands(text: string): Position[] {
+  const str = encode(text);
   const result: Position[] = [];
   const begin = 0, end = str.length;
-  let pos = begin;
+  let position = begin;
 
-  while (pos < end) {
-    const slashSymbol = str.substring(pos).indexOf("/");
+  while (true) {
+    const slashSymbol = str.slice(position).indexOf(ENCODED["/"]);
     if (slashSymbol == -1) break;
-    pos += slashSymbol;
+    position += slashSymbol;
 
-    if (pos != begin) {
-      const prev = str[pos - 1];
-      if (
-        isWordCharacter(prev.codePointAt(0)!) ||
-        prev === "/" || prev === "<" || prev === ">"
-      ) {
-        pos++;
+    if (position != begin) {
+      const prevPos = prevUtf8Unsafe(str, position);
+      const { pos, code: prev } = nextUtf8Unsafe(str, prevPos);
+      position = pos;
+      const prevChar = decodeSingle(prev);
+
+      if (isWordCharacter(prev) || prevChar === "/" || prevChar === "<" || prevChar === ">") {
+        position++;
         continue;
       }
     }
 
-    const commandBegin = ++pos;
-    while (pos != end && isAlphaDigitOrUnderscore(str[pos])) {
-      pos++;
+    const commandBegin = ++position;
+    while (position != end && isAlphaDigitOrUnderscore(decodeSingle(str[position]))) {
+      position++;
     }
-    let commandEnd = pos;
+    let commandEnd = position;
     const commandSize = commandEnd - commandBegin;
     if (commandSize < 1 || commandSize > 64) continue;
 
-    let hasMention = false;
-    const commandEndBackup = commandEnd;
-
-    if (pos != end && str[pos] === "@") {
-      const mentionBegin = ++pos;
-      while (pos != end && isAlphaDigitOrUnderscore(str[pos])) {
-        pos++;
+    if (position != end && str[position] === ENCODED["@"]) {
+      const mentionBegin = ++position;
+      while (position != end && isAlphaDigitOrUnderscore(decodeSingle(str[position]))) {
+        position++;
       }
-      const mentionEnd = pos;
+      const mentionEnd = position;
       const mentionSize = mentionEnd - mentionBegin;
-      if (mentionSize >= 3 && mentionSize <= 32) {
-        commandEnd = pos;
-        hasMention = true;
+      if (mentionSize < 3 || mentionSize > 32) {
+        continue;
       }
+      commandEnd = position;
     }
 
-    if (pos != end) {
-      const next = str[pos];
-      if (
-        isWordCharacter(str.codePointAt(pos)!) || next === "/" ||
-        next === "<" || next === ">"
-      ) {
-        if (!hasMention) continue;
-        commandEnd = commandEndBackup;
-      }
+    let next = 0;
+    if (position != end) {
+      const { pos, code } = nextUtf8Unsafe(str, position);
+      position = pos, next = code;
+    }
+    const nextChar = decodeSingle(next);
+    if (isWordCharacter(next) || nextChar === "/" || nextChar === "<" || nextChar === ">") {
+      continue;
     }
 
     result.push([commandBegin - 1, commandEnd]);
@@ -1606,12 +1631,6 @@ export function getFirstUrl({ text, entities }: FormattedText) {
   }
 
   return "";
-}
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-function decodeSingle(data: number) {
-  return decoder.decode(new Uint8Array([data]));
 }
 
 export function parseMarkdown(input: string): FormattedText {

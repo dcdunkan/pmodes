@@ -1,6 +1,11 @@
 import { getCategory } from "https://esm.sh/unicode-properties@1.4.1";
 import { type MessageEntity, MessageEntityType } from "./types.ts";
 
+export const ENCODED = {
+  "@": 64,
+  "/": 47,
+};
+
 export function CHECK(condition: boolean) {
   if (!condition) {
     console.trace("check failed");
@@ -171,6 +176,32 @@ export function isHashtagLetter(codepoint: number): boolean {
 
 export function isUTF8CharacterFirstCodeUnit(c: number) {
   return (c & 0xC0) != 0x80;
+}
+
+export function prevUtf8Unsafe(data: Uint8Array, pos: number) {
+  while (!isUTF8CharacterFirstCodeUnit(data[--pos])) {
+    // pass
+  }
+  return pos;
+}
+
+export function nextUtf8Unsafe(data: Uint8Array, pos: number): { code: number; pos: number } {
+  let code = 0;
+  const a = data[pos];
+  if ((a & 0x80) == 0) {
+    code = a;
+    return { pos: pos + 1, code };
+  } else if ((a & 0x20) == 0) {
+    code = ((a & 0x1f) << 6) | (data[pos + 1] & 0x3f);
+    return { pos: pos + 2, code };
+  } else if ((a & 0x10) == 0) {
+    code = ((a & 0x0f) << 12) | ((data[pos + 1] & 0x3f) << 6) | (data[pos + 2] & 0x3f);
+    return { pos: pos + 3, code };
+  } else if ((a & 0x08) == 0) {
+    code = ((a & 0x07) << 18) | ((data[pos + 1] & 0x3f) << 12) | ((data[pos + 2] & 0x3f) << 6) | (data[pos + 3] & 0x3f);
+    return { pos: pos + 4, code };
+  }
+  return { pos, code };
 }
 
 export function convertEntityTypeStringToEnum(

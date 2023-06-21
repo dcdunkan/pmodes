@@ -68,11 +68,7 @@ Deno.test("bot commands", () => {
   check("/abc ", ["/abc"]);
   check(" /abc ", ["/abc"]);
   check("/a@abc", ["/a@abc"]);
-  // TODO: ask about this to @levlam. because, in the original tests,
-  // it is NOT supposed to match "/a". and according to the original
-  // matching function, it should match "/a". (as far as i understood).
-  // and bot api does too :/ i'm confused.
-  check("/a@b", ["/a"]); // hmmmm...
+  check("/a@b", []);
   check("/@bfdsa", []);
   check("/test/", []);
 });
