@@ -1,9 +1,10 @@
-import { getCategory } from "https://esm.sh/unicode-properties@1.4.1";
 import { type MessageEntity, MessageEntityType } from "./types.ts";
+import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 
 export const ENCODED = {
   "@": 64,
   "/": 47,
+  "#": 35,
 };
 
 export function CHECK(condition: boolean) {
@@ -110,28 +111,28 @@ export function checkUTF8(str: string) {
       continue;
     }
 
-    ENSURE((a & 0x40) != 0);
+    if (ENSURE((a & 0x40) != 0) == false) return false;
 
     const b = data[pos++];
-    ENSURE((b & 0xc0) == 0x80);
+    if (ENSURE((b & 0xc0) == 0x80) == false) return false;
     if ((a & 0x20) == 0) {
-      ENSURE((a & 0x1e) > 0);
+      if (ENSURE((a & 0x1e) > 0) == false) return false;
       continue;
     }
 
     const c = data[pos++];
-    ENSURE((c & 0xc0) == 0x80);
+    if (ENSURE((c & 0xc0) == 0x80) == false) return false;
     if ((a & 0x10) == 0) {
       const x = ((a & 0x0f) << 6) | (b & 0x20);
-      ENSURE(x != 0 && x != 0x360); // surrogates
+      if (ENSURE(x != 0 && x != 0x360) == false) return false; // surrogates
       continue;
     }
 
     const d = data[pos++];
-    ENSURE((d & 0xc0) == 0x80);
+    if (ENSURE((d & 0xc0) == 0x80) == false) return false;
     if ((a & 0x08) == 0) {
       const t = ((a & 0x07) << 6) | (b & 0x30);
-      ENSURE(0 < t && t < 0x110); // end of unicode
+      if (ENSURE(0 < t && t < 0x110) == false) return false; // end of unicode
       continue;
     }
 
@@ -139,33 +140,14 @@ export function checkUTF8(str: string) {
   } while (true);
 }
 
-export enum UnicodeSimpleCategory {
-  Unknown,
-  Letter,
-  DecimalNumber,
-  Number,
-  Separator,
-}
-
-export function getUnicodeSimpleCategory(
-  codepoint: number,
-): UnicodeSimpleCategory {
-  const category = getCategory(codepoint);
-  if (category === "Nd") return UnicodeSimpleCategory.DecimalNumber;
-  if (category[0] === "L") return UnicodeSimpleCategory.Letter;
-  if (category[0] === "N") return UnicodeSimpleCategory.Number;
-  if (category[0] === "Z") return UnicodeSimpleCategory.Separator;
-  return UnicodeSimpleCategory.Unknown;
-}
-
-export function isHashtagLetter(codepoint: number): boolean {
+export function isHashtagLetter(codepoint: number, category: UnicodeSimpleCategory): boolean {
   if (
     codepoint == "_".codePointAt(0) || codepoint == 0x200c ||
     codepoint == 0xb7 || (0xd80 <= codepoint && codepoint <= 0xdff)
   ) {
     return true;
   }
-  switch (getUnicodeSimpleCategory(codepoint)) {
+  switch (category) {
     case UnicodeSimpleCategory.DecimalNumber:
     case UnicodeSimpleCategory.Letter:
       return true;

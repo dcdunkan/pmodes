@@ -10,7 +10,6 @@ import {
   convertEntityTypeEnumToStyledString,
   convertEntityTypeStringToEnum,
   ENCODED,
-  getUnicodeSimpleCategory,
   hexToInt,
   isAlpha,
   isAlphaDigitOrUnderscore,
@@ -25,8 +24,8 @@ import {
   LOG_CHECK,
   nextUtf8Unsafe,
   prevUtf8Unsafe,
-  UnicodeSimpleCategory,
 } from "./utilities.ts";
+import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 import { equal, unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
 
 export type Position = [number, number];
@@ -143,46 +142,62 @@ export function matchBotCommands(text: string): Position[] {
   return result;
 }
 
-export function matchHashtags(str: string): Position[] {
+export function matchHashtags(text: string): Position[] {
+  const str = encode(text);
   const result: Position[] = [];
   const begin = 0, end = str.length;
-  let pos = begin;
+  let position = begin;
 
   let category: UnicodeSimpleCategory = 0;
 
-  while (pos < end) {
-    const hashSymbol = str.substring(pos).indexOf("#");
+  while (position < end) {
+    const hashSymbol = str.slice(position).indexOf(ENCODED["#"]);
     if (hashSymbol == -1) break;
-    pos += hashSymbol;
+    position += hashSymbol;
 
-    if (pos != begin) {
-      const prev = str.codePointAt(pos - 1)!;
-      category = getUnicodeSimpleCategory(prev);
-      if (isHashtagLetter(prev)) {
-        pos++;
+    if (position != begin) {
+      const prevPos = prevUtf8Unsafe(str, position);
+      const { pos, code: prev } = nextUtf8Unsafe(str, prevPos);
+      position = pos, category = getUnicodeSimpleCategory(prev);
+      if (isHashtagLetter(prev, category)) {
+        position++;
         continue;
       }
     }
 
-    const hashtagBegin = ++pos;
-    let hashtagSize = 0, hashtagEnd = 0;
-    let wasLetter = false;
+    const hashtagBegin = ++position;
+    let hashtagSize = 0, hashtagEnd: number | undefined = undefined;
+    let wasLetter = 1;
 
-    while (pos != end) {
-      category = getUnicodeSimpleCategory(str.codePointAt(pos)!);
-      if (!isHashtagLetter(str.codePointAt(pos)!)) break;
-      pos++;
-      if (hashtagSize == 255) hashtagEnd = pos;
+    while (position != end) {
+      const { pos: nextPos, code } = nextUtf8Unsafe(str, position);
+      position = nextPos;
+      category = getUnicodeSimpleCategory(code);
+      if (!isHashtagLetter(code, category)) {
+        break;
+      }
+
+      if (hashtagSize == 255) {
+        hashtagEnd = position;
+      }
       if (hashtagSize != 256) {
-        wasLetter ||= category == UnicodeSimpleCategory.Letter;
+        wasLetter |= category == UnicodeSimpleCategory.Letter ? 1 : 0;
         hashtagSize++;
       }
     }
 
-    if (!hashtagEnd) hashtagEnd = pos;
-    if (hashtagSize < 1) continue;
-    if (pos != end && str[pos] === "#") continue;
-    if (!wasLetter) continue;
+    if (hashtagEnd == null) {
+      hashtagEnd = position;
+    }
+    if (hashtagSize < 1) {
+      continue;
+    }
+    if (position != end && str[position] == ENCODED["#"]) {
+      continue;
+    }
+    if (!(wasLetter == 1 ? true : false)) {
+      continue;
+    }
     result.push([hashtagBegin - 1, hashtagEnd]);
   }
 
@@ -200,7 +215,7 @@ export function matchCashtags(str: string): Position[] {
     pos += dollarSymbol;
     if (pos != begin) {
       const prev = str.codePointAt(pos - 1)!;
-      if (isHashtagLetter(prev) || str[pos - 1] === "$") {
+      if (isHashtagLetter(prev, category) || str[pos - 1] === "$") {
         pos++;
         continue;
       }
@@ -219,7 +234,7 @@ export function matchCashtags(str: string): Position[] {
     if (cashtagSize < 1 || cashtagSize > 8) continue;
     if (cashtagEnd != end) {
       const next = str.codePointAt(pos)!;
-      if (isHashtagLetter(next) || str[pos] === "$") continue;
+      if (isHashtagLetter(next, category) || str[pos] === "$") continue;
     }
     result.push([cashtagBegin - 1, cashtagEnd]);
   }
