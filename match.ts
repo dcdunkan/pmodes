@@ -3,13 +3,11 @@ import { LinkManager } from "./link_manager.ts";
 import { MessageEntity, MessageEntityType } from "./types.ts";
 import { UserId } from "./user_id.ts";
 import {
-  appendUTF8CharacterUnsafe,
   CHECK,
-  checkUTF8,
   convertEntityTypeEnumToString,
   convertEntityTypeEnumToStyledString,
   convertEntityTypeStringToEnum,
-  ENCODED,
+  CODEPOINTS,
   hexToInt,
   isAlpha,
   isAlphaDigitOrUnderscore,
@@ -19,12 +17,16 @@ import {
   isHashtagLetter,
   isHexDigit,
   isSpace,
-  isUTF8CharacterFirstCodeUnit,
   isWordCharacter,
   LOG_CHECK,
+} from "./utilities.ts";
+import {
+  appendUTF8CharacterUnsafe,
+  checkUTF8,
+  isUTF8CharacterFirstCodeUnit,
   nextUtf8Unsafe,
   prevUtf8Unsafe,
-} from "./utilities.ts";
+} from "./utf8.ts";
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 import { equal, unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
 
@@ -48,7 +50,7 @@ export function matchMentions(text: string): Position[] {
   let position = begin;
 
   while (true) {
-    const atSymbol = str.slice(position).indexOf(ENCODED["@"]);
+    const atSymbol = str.slice(position).indexOf(CODEPOINTS["@"]);
     if (atSymbol == -1) break;
     position += atSymbol;
 
@@ -89,7 +91,7 @@ export function matchBotCommands(text: string): Position[] {
   let position = begin;
 
   while (true) {
-    const slashSymbol = str.slice(position).indexOf(ENCODED["/"]);
+    const slashSymbol = str.slice(position).indexOf(CODEPOINTS["/"]);
     if (slashSymbol == -1) break;
     position += slashSymbol;
 
@@ -113,7 +115,7 @@ export function matchBotCommands(text: string): Position[] {
     const commandSize = commandEnd - commandBegin;
     if (commandSize < 1 || commandSize > 64) continue;
 
-    if (position != end && str[position] === ENCODED["@"]) {
+    if (position != end && str[position] === CODEPOINTS["@"]) {
       const mentionBegin = ++position;
       while (position != end && isAlphaDigitOrUnderscore(decodeSingle(str[position]))) {
         position++;
@@ -151,7 +153,7 @@ export function matchHashtags(text: string): Position[] {
   let category: UnicodeSimpleCategory = 0;
 
   while (position < end) {
-    const hashSymbol = str.slice(position).indexOf(ENCODED["#"]);
+    const hashSymbol = str.slice(position).indexOf(CODEPOINTS["#"]);
     if (hashSymbol == -1) break;
     position += hashSymbol;
 
@@ -192,7 +194,7 @@ export function matchHashtags(text: string): Position[] {
     if (hashtagSize < 1) {
       continue;
     }
-    if (position != end && str[position] == ENCODED["#"]) {
+    if (position != end && str[position] == CODEPOINTS["#"]) {
       continue;
     }
     if (!(wasLetter == 1 ? true : false)) {
