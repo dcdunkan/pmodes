@@ -6,10 +6,9 @@ export enum UnicodeSimpleCategory {
   Separator,
 }
 
-
 // list of [(range_begin << 5) + range_type]
 // deno-fmt-ignore
-const unicode_simple_category_ranges = new Uint32Array([
+const unicodeSimpleCategoryRanges = new Uint32Array([
     0,       1028,    1056,    1538,    1856,    2081,    2912,      3105,    3936,    5124,    5152,    5441,
     5472,    5699,    5760,    5793,    5824,    5923,    5953,      5984,    6019,    6112,    6145,    6880,
     6913,    7904,    7937,    22592,   22721,   23104,   23553,     23712,   23937,   23968,   24001,   24032,
@@ -144,7 +143,7 @@ const unicode_simple_category_ranges = new Uint32Array([
 ]);
 
 // deno-fmt-ignore
-const unicode_simple_category_jump_pos = new Uint16Array([
+const unicodeSimpleCategoryJumpPos = new Uint16Array([
     1,    9,    27,   27,   27,   27,   36,   44,   55,   55,   57,   63,   68,   75,   86,   91,   102,  114,  119,
     130,  158,  180,  202,  225,  250,  271,  292,  312,  324,  332,  357,  365,  368,  383,  397,  397,  397,  407,
     423,  431,  436,  437,  437,  437,  437,  440,  448,  458,  467,  472,  480,  487,  494,  498,  503,  509,  516,
@@ -202,7 +201,7 @@ const unicode_simple_category_jump_pos = new Uint16Array([
     1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566
 ]);
 
-const unicode_simple_category_table =
+const unicodeSimpleCategoryTable =
   "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" +
   "\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x02\x02\x02\x02\x02\x02\x02" +
   "\x02\x02\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" +
@@ -210,10 +209,10 @@ const unicode_simple_category_table =
   "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00";
 
 export function getUnicodeSimpleCategory(code: number): UnicodeSimpleCategory {
-  if (code < 128) return unicode_simple_category_table[code].codePointAt(0)!;
+  if (code < 128) return unicodeSimpleCategoryTable[code].codePointAt(0)!;
   const jumpPosIndex = code <= 0x20000 ? code >> 7 : (0x20000 >> 7) - (0x20000 >> 16) + (code >> 16);
-  let it = unicode_simple_category_jump_pos[jumpPosIndex];
-  code = (code << 6) + 30;
-  while (unicode_simple_category_ranges[it] <= code) ++it;
-  return (unicode_simple_category_ranges[it - 1] & 31);
+  let it = unicodeSimpleCategoryJumpPos[jumpPosIndex];
+  code = (code << 5) + 30;
+  while (unicodeSimpleCategoryRanges[it] <= code) ++it;
+  return (unicodeSimpleCategoryRanges[it - 1] & 31);
 }

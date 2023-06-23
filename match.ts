@@ -4,10 +4,10 @@ import { MessageEntity, MessageEntityType } from "./types.ts";
 import { UserId } from "./user_id.ts";
 import {
   CHECK,
+  CODEPOINTS,
   convertEntityTypeEnumToString,
   convertEntityTypeEnumToStyledString,
   convertEntityTypeStringToEnum,
-  CODEPOINTS,
   hexToInt,
   isAlpha,
   isAlphaDigitOrUnderscore,
@@ -34,11 +34,9 @@ export type Position = [number, number];
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-
 function decodeSingle(data: number) {
   return decoder.decode(new Uint8Array([data]));
 }
-
 function encode(data: string) {
   return encoder.encode(data);
 }
@@ -144,62 +142,46 @@ export function matchBotCommands(text: string): Position[] {
   return result;
 }
 
-export function matchHashtags(text: string): Position[] {
-  const str = encode(text);
+export function matchHashtags(str: string): Position[] {
   const result: Position[] = [];
   const begin = 0, end = str.length;
-  let position = begin;
+  let pos = begin;
 
   let category: UnicodeSimpleCategory = 0;
 
-  while (position < end) {
-    const hashSymbol = str.slice(position).indexOf(CODEPOINTS["#"]);
+  while (pos < end) {
+    const hashSymbol = str.substring(pos).indexOf("#");
     if (hashSymbol == -1) break;
-    position += hashSymbol;
+    pos += hashSymbol;
 
-    if (position != begin) {
-      const prevPos = prevUtf8Unsafe(str, position);
-      const { pos, code: prev } = nextUtf8Unsafe(str, prevPos);
-      position = pos, category = getUnicodeSimpleCategory(prev);
-      if (isHashtagLetter(prev, category)) {
-        position++;
+    if (pos != begin) {
+      const prev = str.codePointAt(pos - 1)!;
+      category = getUnicodeSimpleCategory(prev);
+      if (isHashtagLetter(prev)) {
+        pos++;
         continue;
       }
     }
 
-    const hashtagBegin = ++position;
-    let hashtagSize = 0, hashtagEnd: number | undefined = undefined;
-    let wasLetter = 1;
+    const hashtagBegin = ++pos;
+    let hashtagSize = 0, hashtagEnd = 0;
+    let wasLetter = false;
 
-    while (position != end) {
-      const { pos: nextPos, code } = nextUtf8Unsafe(str, position);
-      position = nextPos;
-      category = getUnicodeSimpleCategory(code);
-      if (!isHashtagLetter(code, category)) {
-        break;
-      }
-
-      if (hashtagSize == 255) {
-        hashtagEnd = position;
-      }
+    while (pos != end) {
+      category = getUnicodeSimpleCategory(str.codePointAt(pos)!);
+      if (!isHashtagLetter(str.codePointAt(pos)!)) break;
+      pos++;
+      if (hashtagSize == 255) hashtagEnd = pos;
       if (hashtagSize != 256) {
-        wasLetter |= category == UnicodeSimpleCategory.Letter ? 1 : 0;
+        wasLetter ||= category == UnicodeSimpleCategory.Letter;
         hashtagSize++;
       }
     }
 
-    if (hashtagEnd == null) {
-      hashtagEnd = position;
-    }
-    if (hashtagSize < 1) {
-      continue;
-    }
-    if (position != end && str[position] == CODEPOINTS["#"]) {
-      continue;
-    }
-    if (!(wasLetter == 1 ? true : false)) {
-      continue;
-    }
+    if (!hashtagEnd) hashtagEnd = pos;
+    if (hashtagSize < 1) continue;
+    if (pos != end && str[pos] === "#") continue;
+    if (!wasLetter) continue;
     result.push([hashtagBegin - 1, hashtagEnd]);
   }
 

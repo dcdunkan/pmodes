@@ -1,11 +1,11 @@
 import { type MessageEntity, MessageEntityType } from "./types.ts";
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 
-/** Code points of some characters used at lots of places */
 export const CODEPOINTS = {
   "@": 64,
   "/": 47,
   "#": 35,
+  "_": 95,
 };
 
 export function CHECK(condition: boolean) {
@@ -27,7 +27,7 @@ export function isWordCharacter(code: number) {
     case UnicodeSimpleCategory.Number:
       return true;
     default:
-      return code == "_".codePointAt(0);
+      return code == CODEPOINTS["_"];
   }
 }
 
@@ -73,14 +73,14 @@ export function hexToInt(c: string) {
   return 16;
 }
 
-export function isHashtagLetter(codepoint: number, category: UnicodeSimpleCategory): boolean {
+export function isHashtagLetter(codepoint: number): boolean {
   if (
-    codepoint == "_".codePointAt(0) || codepoint == 0x200c ||
+    codepoint == CODEPOINTS["_"] || codepoint == 0x200c ||
     codepoint == 0xb7 || (0xd80 <= codepoint && codepoint <= 0xdff)
   ) {
     return true;
   }
-  switch (category) {
+  switch (getUnicodeSimpleCategory(codepoint)) {
     case UnicodeSimpleCategory.DecimalNumber:
     case UnicodeSimpleCategory.Letter:
       return true;
