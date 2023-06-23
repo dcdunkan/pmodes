@@ -16,9 +16,13 @@ import {
 import { MessageEntity } from "./types.ts";
 import { UserId } from "./user_id.ts";
 
+const encoder = new TextEncoder(), decoder = new TextDecoder();
+const encode = (str: string) => encoder.encode(str);
+const decode = (data: Uint8Array) => decoder.decode(data);
+
 function checkFn(fn: (text: string) => [number, number][]) {
   return (text: string, expected: string[]) => {
-    assertEquals(fn(text).map(([s, e]) => text.substring(s, e)), expected);
+    assertEquals(fn(text).map(([s, e]) => decode(encode(text).slice(s, e))), expected);
   };
 }
 

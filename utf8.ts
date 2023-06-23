@@ -1,3 +1,5 @@
+import { unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
+
 export function appendUTF8CharacterUnsafe(text: Uint8Array, pos: number, code: number) {
   if (code <= 0x7f) {
     text[pos++] = code;
@@ -71,9 +73,7 @@ export function isUTF8CharacterFirstCodeUnit(c: number) {
 }
 
 export function prevUtf8Unsafe(data: Uint8Array, pos: number) {
-  while (!isUTF8CharacterFirstCodeUnit(data[--pos])) {
-    // pass
-  }
+  while (!isUTF8CharacterFirstCodeUnit(data[--pos]));
   return pos;
 }
 
@@ -93,5 +93,5 @@ export function nextUtf8Unsafe(data: Uint8Array, pos: number): { code: number; p
     code = ((a & 0x07) << 18) | ((data[pos + 1] & 0x3f) << 12) | ((data[pos + 2] & 0x3f) << 6) | (data[pos + 3] & 0x3f);
     return { pos: pos + 4, code };
   }
-  return { pos, code };
+  unreachable();
 }

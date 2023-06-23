@@ -32,13 +32,16 @@ import { equal, unreachable } from "https://deno.land/std@0.191.0/testing/assert
 
 export type Position = [number, number];
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-function decodeSingle(data: number) {
-  return decoder.decode(new Uint8Array([data]));
-}
+const encoder = new TextEncoder(), decoder = new TextDecoder();
+
 function encode(data: string) {
   return encoder.encode(data);
+}
+
+function decode(data: number): string;
+function decode(data: Uint8Array): string;
+function decode(data: number | Uint8Array): string {
+  return decoder.decode(typeof data === "number" ? new Uint8Array([data]) : data);
 }
 
 export function matchMentions(text: string): Position[] {
@@ -54,28 +57,30 @@ export function matchMentions(text: string): Position[] {
 
     if (position != begin) {
       const prevPos = prevUtf8Unsafe(str, position);
-      const { code: prev, pos } = nextUtf8Unsafe(str, prevPos);
-      position = pos;
+      const { code: prev } = nextUtf8Unsafe(str, prevPos);
+
       if (isWordCharacter(prev)) {
         position++;
         continue;
       }
     }
     const mentionBegin = ++position;
-    while (position != end && isAlphaDigitOrUnderscore(decodeSingle(str[position]))) {
+    while (position != end && isAlphaDigitOrUnderscore(decode(str[position]))) {
       position++;
     }
     const mentionEnd = position;
-    const size = mentionEnd - mentionBegin;
-    if (size < 2 || size > 32) continue;
-
+    const mentionSize = mentionEnd - mentionBegin;
+    if (mentionSize < 2 || mentionSize > 32) {
+      continue;
+    }
     let next = 0;
     if (position != end) {
-      const { pos, code } = nextUtf8Unsafe(str, position);
-      position = pos, next = code;
+      const { code } = nextUtf8Unsafe(str, position);
+      next = code;
     }
-
-    if (isWordCharacter(next)) continue;
+    if (isWordCharacter(next)) {
+      continue;
+    }
     result.push([mentionBegin - 1, mentionEnd]);
   }
 
@@ -95,9 +100,8 @@ export function matchBotCommands(text: string): Position[] {
 
     if (position != begin) {
       const prevPos = prevUtf8Unsafe(str, position);
-      const { pos, code: prev } = nextUtf8Unsafe(str, prevPos);
-      position = pos;
-      const prevChar = decodeSingle(prev);
+      const { code: prev } = nextUtf8Unsafe(str, prevPos);
+      const prevChar = decode(prev);
 
       if (isWordCharacter(prev) || prevChar === "/" || prevChar === "<" || prevChar === ">") {
         position++;
@@ -106,7 +110,7 @@ export function matchBotCommands(text: string): Position[] {
     }
 
     const commandBegin = ++position;
-    while (position != end && isAlphaDigitOrUnderscore(decodeSingle(str[position]))) {
+    while (position != end && isAlphaDigitOrUnderscore(decode(str[position]))) {
       position++;
     }
     let commandEnd = position;
@@ -115,7 +119,7 @@ export function matchBotCommands(text: string): Position[] {
 
     if (position != end && str[position] === CODEPOINTS["@"]) {
       const mentionBegin = ++position;
-      while (position != end && isAlphaDigitOrUnderscore(decodeSingle(str[position]))) {
+      while (position != end && isAlphaDigitOrUnderscore(decode(str[position]))) {
         position++;
       }
       const mentionEnd = position;
@@ -128,10 +132,10 @@ export function matchBotCommands(text: string): Position[] {
 
     let next = 0;
     if (position != end) {
-      const { pos, code } = nextUtf8Unsafe(str, position);
-      position = pos, next = code;
+      const { code } = nextUtf8Unsafe(str, position);
+      next = code;
     }
-    const nextChar = decodeSingle(next);
+    const nextChar = decode(next);
     if (isWordCharacter(next) || nextChar === "/" || nextChar === "<" || nextChar === ">") {
       continue;
     }
@@ -142,45 +146,49 @@ export function matchBotCommands(text: string): Position[] {
   return result;
 }
 
-export function matchHashtags(str: string): Position[] {
+export function matchHashtags(text: string): Position[] {
+  const str = encode(text);
   const result: Position[] = [];
   const begin = 0, end = str.length;
-  let pos = begin;
+  let position = begin;
 
   let category: UnicodeSimpleCategory = 0;
 
-  while (pos < end) {
-    const hashSymbol = str.substring(pos).indexOf("#");
+  while (true) {
+    const hashSymbol = str.slice(position).indexOf(CODEPOINTS["#"]);
     if (hashSymbol == -1) break;
-    pos += hashSymbol;
+    position += hashSymbol;
 
-    if (pos != begin) {
-      const prev = str.codePointAt(pos - 1)!;
+    if (position != begin) {
+      const prevPos = prevUtf8Unsafe(str, position);
+      const { code: prev } = nextUtf8Unsafe(str, prevPos);
       category = getUnicodeSimpleCategory(prev);
       if (isHashtagLetter(prev)) {
-        pos++;
+        position++;
         continue;
       }
     }
 
-    const hashtagBegin = ++pos;
-    let hashtagSize = 0, hashtagEnd = 0;
+    const hashtagBegin = ++position;
+    let hashtagSize = 0, hashtagEnd: number | undefined = undefined;
     let wasLetter = false;
 
-    while (pos != end) {
-      category = getUnicodeSimpleCategory(str.codePointAt(pos)!);
-      if (!isHashtagLetter(str.codePointAt(pos)!)) break;
-      pos++;
-      if (hashtagSize == 255) hashtagEnd = pos;
+    while (position != end) {
+      const { code, pos } = nextUtf8Unsafe(str, position);
+      category = getUnicodeSimpleCategory(code);
+      if (!isHashtagLetter(code)) break;
+      position = pos;
+
+      if (hashtagSize == 255) hashtagEnd = position;
       if (hashtagSize != 256) {
         wasLetter ||= category == UnicodeSimpleCategory.Letter;
         hashtagSize++;
       }
     }
 
-    if (!hashtagEnd) hashtagEnd = pos;
+    if (hashtagEnd == null) hashtagEnd = position;
     if (hashtagSize < 1) continue;
-    if (pos != end && str[pos] === "#") continue;
+    if (position != end && str[position] == CODEPOINTS["#"]) continue;
     if (!wasLetter) continue;
     result.push([hashtagBegin - 1, hashtagEnd]);
   }
@@ -188,37 +196,46 @@ export function matchHashtags(str: string): Position[] {
   return result;
 }
 
-export function matchCashtags(str: string): Position[] {
+export function matchCashtags(text: string): Position[] {
+  const str = encode(text);
   const result: Position[] = [];
   const begin = 0, end = str.length;
-  let pos = begin;
+  let position = begin;
 
-  while (pos < end) {
-    const dollarSymbol = str.substring(pos).indexOf("$");
+  while (true) {
+    const dollarSymbol = str.slice(position).indexOf(CODEPOINTS["$"]);
     if (dollarSymbol == -1) break;
-    pos += dollarSymbol;
-    if (pos != begin) {
-      const prev = str.codePointAt(pos - 1)!;
-      if (isHashtagLetter(prev, category) || str[pos - 1] === "$") {
-        pos++;
+    position += dollarSymbol;
+
+    if (position != begin) {
+      const prevPosition = prevUtf8Unsafe(str, position);
+      const { code: prev } = nextUtf8Unsafe(str, prevPosition);
+
+      if (isHashtagLetter(prev) || prev === CODEPOINTS["$"]) {
+        position++;
         continue;
       }
     }
 
-    const cashtagBegin = ++pos;
-    if ((end - pos) >= 5 && str.substring(pos, pos + 5) === "1INCH") {
-      pos += 5;
+    const cashtagBegin = ++position;
+    if ((end - position) >= 5 && decode(str.slice(position, position + 5)) === "1INCH") {
+      position += 5;
     } else {
-      while ((pos != end) && "Z" >= str[pos] && str[pos] >= "A") {
-        pos++;
+      while ((position != end) && CODEPOINTS["Z"] >= str[position] && str[position] >= CODEPOINTS["A"]) {
+        position++;
       }
     }
-    const cashtagEnd = pos;
+    const cashtagEnd = position;
     const cashtagSize = cashtagEnd - cashtagBegin;
-    if (cashtagSize < 1 || cashtagSize > 8) continue;
+    if (cashtagSize < 1 || cashtagSize > 8) {
+      continue;
+    }
+
     if (cashtagEnd != end) {
-      const next = str.codePointAt(pos)!;
-      if (isHashtagLetter(next, category) || str[pos] === "$") continue;
+      const { code } = nextUtf8Unsafe(str, position);
+      if (isHashtagLetter(code) || code === CODEPOINTS["$"]) {
+        continue;
+      }
     }
     result.push([cashtagBegin - 1, cashtagEnd]);
   }
@@ -226,51 +243,57 @@ export function matchCashtags(str: string): Position[] {
   return result;
 }
 
-export function matchMediaTimestamps(str: string) {
+export function matchMediaTimestamps(text: string) {
+  const str = encode(text);
   const result: Position[] = [];
   const begin = 0, end = str.length;
-  let pos = begin;
+  let position = begin;
 
-  while (pos < end) {
-    const colonSign = str.substring(pos).indexOf(":");
+  while (true) {
+    const colonSign = str.slice(position).indexOf(CODEPOINTS[":"]);
     if (colonSign == -1) break;
-    pos += colonSign;
+    position += colonSign;
 
-    let mediaTimestampBegin = pos;
+    let mediaTimestampBegin = position;
     while (
       mediaTimestampBegin != begin &&
-      (str[mediaTimestampBegin - 1] === ":" ||
-        isDigit(str[mediaTimestampBegin - 1]))
+      (str[mediaTimestampBegin - 1] == CODEPOINTS[":"] || isDigit(decode(str[mediaTimestampBegin - 1])))
     ) {
       mediaTimestampBegin--;
     }
-
-    let mediaTimestampEnd = pos;
+    let mediaTimestampEnd = position;
     while (
       mediaTimestampEnd + 1 != end &&
-      (str[mediaTimestampEnd + 1] === ":" ||
-        isDigit(str[mediaTimestampEnd + 1]))
+      (str[mediaTimestampEnd + 1] == CODEPOINTS[":"] || isDigit(decode(str[mediaTimestampEnd + 1])))
     ) {
       mediaTimestampEnd++;
     }
     mediaTimestampEnd++;
 
     if (
-      mediaTimestampEnd != pos && mediaTimestampEnd != (pos + 1) &&
-      isDigit(str[pos + 1])
+      mediaTimestampEnd != position && mediaTimestampEnd != (position + 1) &&
+      isDigit(decode(str[position + 1]))
     ) {
-      pos = mediaTimestampEnd;
+      position = mediaTimestampEnd;
+
       if (mediaTimestampBegin != begin) {
-        const prev = str.codePointAt(mediaTimestampBegin - 1)!;
-        if (isWordCharacter(prev)) continue;
+        const prevPosition = prevUtf8Unsafe(str, mediaTimestampBegin);
+        const { code: prev } = nextUtf8Unsafe(str, prevPosition);
+
+        if (isWordCharacter(prev)) {
+          continue;
+        }
       }
       if (mediaTimestampEnd != end) {
-        const next = str.codePointAt(mediaTimestampEnd)!;
-        if (isWordCharacter(next)) continue;
+        const { code: next } = nextUtf8Unsafe(str, mediaTimestampEnd);
+
+        if (isWordCharacter(next)) {
+          continue;
+        }
       }
       result.push([mediaTimestampBegin, mediaTimestampEnd]);
     } else {
-      pos = mediaTimestampEnd;
+      position = mediaTimestampEnd;
     }
   }
 
@@ -1640,9 +1663,9 @@ export function parseMarkdown(input: string): FormattedText {
   let offset = 0;
 
   for (let i = 0; i < size; i++) {
-    const c = decodeSingle(text[i]),
+    const c = decode(text[i]),
       codepoint = text[i],
-      next = decodeSingle(text[i + 1]);
+      next = decode(text[i + 1]);
     if (c === "\\" && (next === "_" || next === "*" || next === "`" || next === "[")) {
       i++;
       text[resultSize++] = text[i];
@@ -1659,28 +1682,28 @@ export function parseMarkdown(input: string): FormattedText {
     }
 
     const beginPos = i;
-    let endCharacter = decodeSingle(text[i]);
+    let endCharacter = decode(text[i]);
     let isPre = false;
     if (c === "[") endCharacter = "]";
 
     i++;
 
     let language: string | undefined = undefined;
-    if (c === "`" && decodeSingle(text[i]) === "`" && decodeSingle(text[i + 1]) === "`") {
+    if (c === "`" && decode(text[i]) === "`" && decode(text[i + 1]) === "`") {
       i += 2;
       isPre = true;
       let languageEnd = i;
 
-      while (!isSpace(decodeSingle(text[languageEnd])) && decodeSingle(text[languageEnd]) != "`") {
+      while (!isSpace(decode(text[languageEnd])) && decode(text[languageEnd]) != "`") {
         languageEnd++;
       }
 
-      if (i != languageEnd && languageEnd < size && decodeSingle(text[languageEnd]) != "`") {
+      if (i != languageEnd && languageEnd < size && decode(text[languageEnd]) != "`") {
         language = decoder.decode(text.slice(i, languageEnd));
         i = languageEnd;
       }
 
-      const current = decodeSingle(text[i]), next = decodeSingle(text[i + 1]);
+      const current = decode(text[i]), next = decode(text[i + 1]);
       if (current === "\n" || current === "\r") {
         if ((next === "\n" || next === "\r") && current != next) {
           i += 2;
@@ -1693,8 +1716,8 @@ export function parseMarkdown(input: string): FormattedText {
     const entityOffset = offset;
     while (
       i < size &&
-      (decodeSingle(text[i]) !== endCharacter ||
-        (isPre && !(decodeSingle(text[i + 1]) === "`" && decodeSingle(text[i + 2]) === "`")))
+      (decode(text[i]) !== endCharacter ||
+        (isPre && !(decode(text[i + 1]) === "`" && decode(text[i + 2]) === "`")))
     ) {
       const curCh = text[i];
       if (isUTF8CharacterFirstCodeUnit(curCh)) {
@@ -1726,12 +1749,12 @@ export function parseMarkdown(input: string): FormattedText {
           break;
         case "[": {
           let url = "";
-          if (decodeSingle(text[i + 1]) !== "(") {
+          if (decode(text[i + 1]) !== "(") {
             url = decoder.decode(text.slice(beginPos + 1, i));
           } else {
             i += 2;
-            while (i < size && decodeSingle(text[i]) !== ")") {
-              url += decodeSingle(text[i++]);
+            while (i < size && decode(text[i]) !== ")") {
+              url += decode(text[i++]);
             }
           }
           const userId = LinkManager.getLinkUserId(url);
@@ -1807,7 +1830,7 @@ export function parseMarkdownV2(input: string): FormattedText {
   const nestedEntities: EntityInfo[] = [];
 
   for (let i = 0; i < text.length; i++) {
-    const c = decodeSingle(text[i]), codepoint = text[i];
+    const c = decode(text[i]), codepoint = text[i];
     if (
       c === "\\" &&
       text[i + 1] != null && text[i + 1] > 0 && text[i + 1] <= 126
@@ -1842,7 +1865,7 @@ export function parseMarkdownV2(input: string): FormattedText {
     let isEndOfAnEntity = false;
     if (nestedEntities.length != 0) {
       isEndOfAnEntity = (() => {
-        const nextChar = decodeSingle(text[i + 1]);
+        const nextChar = decode(text[i + 1]);
         switch (nestedEntities[nestedEntities.length - 1].type) {
           case MessageEntityType.Bold:
             return c === "*";
@@ -1852,7 +1875,7 @@ export function parseMarkdownV2(input: string): FormattedText {
             return c === "`";
           case MessageEntityType.Pre:
           case MessageEntityType.PreCode:
-            return c === "`" && nextChar === "`" && decodeSingle(text[i + 2]) === "`";
+            return c === "`" && nextChar === "`" && decode(text[i + 2]) === "`";
           case MessageEntityType.TextUrl:
             return c === "]";
           case MessageEntityType.Underline:
@@ -1873,7 +1896,7 @@ export function parseMarkdownV2(input: string): FormattedText {
       let type: MessageEntityType;
       let argument = "";
       const entityByteOffset = i;
-      const nextChar = decodeSingle(text[i + 1]);
+      const nextChar = decode(text[i + 1]);
 
       switch (c) {
         case "_":
@@ -1902,19 +1925,19 @@ export function parseMarkdownV2(input: string): FormattedText {
           type = MessageEntityType.TextUrl;
           break;
         case "`":
-          if (nextChar === "`" && decodeSingle(text[i + 2]) === "`") {
+          if (nextChar === "`" && decode(text[i + 2]) === "`") {
             i += 3;
             type = MessageEntityType.Pre;
             let languageEnd = i;
-            while (!isSpace(decodeSingle(text[languageEnd])) && decodeSingle(text[languageEnd]) !== "`") {
+            while (!isSpace(decode(text[languageEnd])) && decode(text[languageEnd]) !== "`") {
               languageEnd++;
             }
-            if (i != languageEnd && languageEnd < text.length && decodeSingle(text[languageEnd]) !== "`") {
+            if (i != languageEnd && languageEnd < text.length && decode(text[languageEnd]) !== "`") {
               type = MessageEntityType.PreCode;
               argument = decoder.decode(text.slice(i, languageEnd));
               i = languageEnd;
             }
-            const current = decodeSingle(text[i]), next = decodeSingle(text[i + 1]);
+            const current = decode(text[i]), next = decode(text[i + 1]);
             if (current === "\n" || current === "\r") {
               if ((next === "\n" || next === "\r") && current !== next) {
                 i += 2;
@@ -1962,20 +1985,20 @@ export function parseMarkdownV2(input: string): FormattedText {
           break;
         case MessageEntityType.TextUrl: {
           let url = "";
-          if (decodeSingle(text[i + 1]) !== "(") {
+          if (decode(text[i + 1]) !== "(") {
             url = decoder.decode(text.slice(nestedEntities.at(-1)!.entityBeginPos, resultSize));
           } else {
             i += 2;
             const urlBeginPos = i;
-            while (i < text.length && decodeSingle(text[i]) !== ")") {
-              if (decodeSingle(text[i]) === "\\" && text[i + 1] > 0 && text[i + 1] <= 126) {
-                url += decodeSingle(text[i + 1]);
+            while (i < text.length && decode(text[i]) !== ")") {
+              if (decode(text[i]) === "\\" && text[i + 1] > 0 && text[i + 1] <= 126) {
+                url += decode(text[i + 1]);
                 i += 2;
                 continue;
               }
-              url += decodeSingle(text[i++]);
+              url += decode(text[i++]);
             }
-            if (decodeSingle(text[i]) !== ")") {
+            if (decode(text[i]) !== ")") {
               throw new Error("Can't find end of a URL at byte offset " + urlBeginPos);
             }
           }
@@ -1991,21 +2014,21 @@ export function parseMarkdownV2(input: string): FormattedText {
           break;
         }
         case MessageEntityType.CustomEmoji: {
-          if (decodeSingle(text[i + 1]) !== "(") {
+          if (decode(text[i + 1]) !== "(") {
             throw new Error("Custom emoji entity must contain a tg://emoji URL");
           }
           i += 2;
           let url = "";
           const urlBeginPos = i;
-          while (i < text.length && decodeSingle(text[i]) !== ")") {
-            if (decodeSingle(text[i]) === "\\" && text[i + 1] > 0 && text[i + 1] <= 126) {
-              url += decodeSingle(text[i + 1]);
+          while (i < text.length && decode(text[i]) !== ")") {
+            if (decode(text[i]) === "\\" && text[i + 1] > 0 && text[i + 1] <= 126) {
+              url += decode(text[i + 1]);
               i += 2;
               continue;
             }
-            url += decodeSingle(text[i++]);
+            url += decode(text[i++]);
           }
-          if (decodeSingle(text[i]) !== ")") {
+          if (decode(text[i]) !== ")") {
             throw new Error("Can't find end of a custom emoji URL at byte offset " + urlBeginPos);
           }
           customEmojiId = LinkManager.getLinkCustomEmojiId(url);
@@ -2062,19 +2085,19 @@ export function parseMarkdownV2(input: string): FormattedText {
 }
 
 export function decodeHTMLEntity(text: Uint8Array, pos: number) {
-  CHECK(decodeSingle(text[pos]) === "&");
+  CHECK(decode(text[pos]) === "&");
   let endPos = pos + 1;
   let res = 0;
 
-  if (decodeSingle(text[pos + 1]) === "#") {
+  if (decode(text[pos + 1]) === "#") {
     endPos++;
-    if (decodeSingle(text[pos + 2]) === "x") {
+    if (decode(text[pos + 2]) === "x") {
       endPos++;
-      while (isHexDigit(decodeSingle(text[endPos]))) {
-        res = res * 16 + hexToInt(decodeSingle(text[endPos++]));
+      while (isHexDigit(decode(text[endPos]))) {
+        res = res * 16 + hexToInt(decode(text[endPos++]));
       }
     } else {
-      while (isDigit(decodeSingle(text[endPos]))) {
+      while (isDigit(decode(text[endPos]))) {
         res = res * 10 + text[endPos++] - "0".codePointAt(0)!;
       }
     }
@@ -2082,7 +2105,7 @@ export function decodeHTMLEntity(text: Uint8Array, pos: number) {
       return 0;
     }
   } else {
-    while (isAlpha(decodeSingle(text[endPos]))) {
+    while (isAlpha(decode(text[endPos]))) {
       endPos++;
     }
     const entity = decoder.decode(text.slice(pos + 1, endPos));
@@ -2099,7 +2122,7 @@ export function decodeHTMLEntity(text: Uint8Array, pos: number) {
     }
   }
 
-  if (decodeSingle(text[endPos]) === ";") {
+  if (decode(text[endPos]) === ";") {
     pos = endPos + 1;
   } else {
     pos = endPos;
@@ -2128,7 +2151,7 @@ export function parseHTML(str_: string) {
   const nestedEntities: EntityInfo[] = [];
 
   for (let i = 0; i < strSize; i++) {
-    const c = decodeSingle(text[i]), c_ = text[i];
+    const c = decode(text[i]), c_ = text[i];
     if (c === "&") {
       const code = decodeHTMLEntity(text, i);
       if (code != 0) {
@@ -2152,8 +2175,8 @@ export function parseHTML(str_: string) {
     }
 
     const beginPos = i++;
-    if (decodeSingle(text[i]) !== "/") {
-      while (!isSpace(decodeSingle(text[i])) && decodeSingle(text[i]) !== ">") {
+    if (decode(text[i]) !== "/") {
+      while (!isSpace(decode(text[i])) && decode(text[i]) !== ">") {
         i++;
       }
       if (text[i] == 0) {
@@ -2171,31 +2194,31 @@ export function parseHTML(str_: string) {
       }
 
       let argument = "";
-      while (decodeSingle(text[i]) !== ">") {
-        while (text[i] !== 0 && isSpace(decodeSingle(text[i]))) {
+      while (decode(text[i]) !== ">") {
+        while (text[i] !== 0 && isSpace(decode(text[i]))) {
           i++;
         }
-        if (decodeSingle(text[i]) === ">") {
+        if (decode(text[i]) === ">") {
           break;
         }
         const attributeBeginPos = i;
-        while (!isSpace(decodeSingle(text[i])) && decodeSingle(text[i]) !== "=") {
+        while (!isSpace(decode(text[i])) && decode(text[i]) !== "=") {
           i++;
         }
         const attributeName = decoder.decode(text.slice(attributeBeginPos, i));
         if (attributeName.length == 0) {
           throw new Error(`Empty attribute name in the tag "${tagName}" at byte offset ${attributeBeginPos}`);
         }
-        while (text[i] != 0 && isSpace(decodeSingle(text[i]))) {
+        while (text[i] != 0 && isSpace(decode(text[i]))) {
           i++;
         }
-        if (decodeSingle(text[i]) !== "=") {
+        if (decode(text[i]) !== "=") {
           throw new Error(
             `Expected equal sign in declaration of an attribute of the tag "${tagName}" at byte offset ${beginPos}`,
           );
         }
         i++;
-        while (text[i] != 0 && isSpace(decodeSingle(text[i]))) {
+        while (text[i] != 0 && isSpace(decode(text[i]))) {
           i++;
         }
         if (text[i] == 0) {
@@ -2203,15 +2226,15 @@ export function parseHTML(str_: string) {
         }
 
         let attributeValue = "";
-        if (decodeSingle(text[i]) !== "'" && decodeSingle(text[i]) !== '"') {
+        if (decode(text[i]) !== "'" && decode(text[i]) !== '"') {
           const tokenBeginPos = i;
           while (
-            isAlphaOrDigit(decodeSingle(text[i])) || decodeSingle(text[i]) === "." || decodeSingle(text[i]) === "-"
+            isAlphaOrDigit(decode(text[i])) || decode(text[i]) === "." || decode(text[i]) === "-"
           ) {
             i++;
           }
           attributeValue = decoder.decode(text.slice(tokenBeginPos, i)).toLowerCase();
-          if (!isSpace(decodeSingle(text[i])) && decodeSingle(text[i]) !== ">") {
+          if (!isSpace(decode(text[i])) && decode(text[i]) !== ">") {
             throw new Error(`Unexpected end of name token at byte offset ${tokenBeginPos}`);
           }
         } else {
@@ -2219,7 +2242,7 @@ export function parseHTML(str_: string) {
           let attributeEnd = text[i];
           const attributeBegin = attributeEnd;
           while (text[i] != endCharacter && text[i] != 0) {
-            if (decodeSingle(text[i]) === "&") {
+            if (decode(text[i]) === "&") {
               const code = decodeHTMLEntity(text, i);
               if (code != 0) {
                 attributeEnd = appendUTF8CharacterUnsafe(text, attributeEnd, code.res);
@@ -2264,14 +2287,14 @@ export function parseHTML(str_: string) {
         throw new Error(`Unexpected end tag at byte offset ${beginPos}`);
       }
 
-      if (!isSpace(decodeSingle(text[i])) && decodeSingle(text[i]) !== ">") {
+      if (!isSpace(decode(text[i])) && decode(text[i]) !== ">") {
         i++;
       }
       const endTagName = decoder.decode(text.slice(beginPos + 2, i)).toLowerCase();
-      while (isSpace(decodeSingle(text[i])) && text[i] != 0) {
+      while (isSpace(decode(text[i])) && text[i] != 0) {
         i++;
       }
-      if (decodeSingle(text[i]) !== ">") {
+      if (decode(text[i]) !== ">") {
         throw new Error(`Unclosed end tag at byte offset ${beginPos}`);
       }
 

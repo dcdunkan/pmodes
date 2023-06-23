@@ -6,6 +6,10 @@ export const CODEPOINTS = {
   "/": 47,
   "#": 35,
   "_": 95,
+  "$": 36,
+  ":": 58,
+  "A": 65,
+  "Z": 90,
 };
 
 export function CHECK(condition: boolean) {
