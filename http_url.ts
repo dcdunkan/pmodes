@@ -1,5 +1,6 @@
-import { CHECK, isAlphaOrDigit, isHexDigit, isSpace } from "./utilities.ts";
+import { encode, mergeTypedArrays, toInteger } from "./encode.ts";
 import { IPAddress } from "./ipaddress.ts";
+import { areTypedArraysEqual, CHECK, CODEPOINTS, isAlphaOrDigit, isHexDigit, isSpace, toLower } from "./utilities.ts";
 
 export enum HttpUrlProtocol {
   Http,
@@ -8,21 +9,21 @@ export enum HttpUrlProtocol {
 
 export class HttpUrl {
   protocol: HttpUrlProtocol = HttpUrlProtocol.Http;
-  userinfo: string;
-  host: string;
+  userinfo: Uint8Array;
+  host: Uint8Array;
   isIpv6 = false;
   specifiedPort = 0;
   port = 0;
-  query: string;
+  query: Uint8Array;
 
   constructor(
     protocol: HttpUrlProtocol,
-    userinfo: string,
-    host: string,
+    userinfo: Uint8Array,
+    host: Uint8Array,
     isIpv6: boolean,
     specifiedPort: number,
     port: number,
-    query: string,
+    query: Uint8Array,
   ) {
     this.protocol = protocol;
     this.userinfo = userinfo;
@@ -33,33 +34,33 @@ export class HttpUrl {
     this.query = query;
   }
 
-  getUrl() {
-    let result = "";
+  getUrl(): Uint8Array {
+    const result: Uint8Array[] = [];
     switch (this.protocol) {
       case HttpUrlProtocol.Http:
-        result += "http://";
+        result.push(encode("http://"));
         break;
       case HttpUrlProtocol.Https:
-        result += "https://";
+        result.push(encode("https://"));
         break;
       default:
         throw new Error("UNREACHABLE");
     }
-    if (this.userinfo != null && this.userinfo.trim() != "") {
-      result += this.userinfo;
-      result += "@";
+    if (this.userinfo != null && this.userinfo.length !== 0) {
+      result.push(this.userinfo);
+      result.push(Uint8Array.of(CODEPOINTS["@"]));
     }
-    result += this.host;
+    result.push(this.host);
     if (this.specifiedPort > 0) {
-      result += ":";
-      result += this.specifiedPort.toString();
+      result.push(Uint8Array.of(CODEPOINTS[":"]));
+      result.push(encode(this.specifiedPort.toString()));
     }
-    result += this.query;
-    return result;
+    result.push(this.query);
+    return mergeTypedArrays(...result);
   }
 }
 
-function firstIndexOf(str: string, toFind: string[]) {
+function firstIndexOf(str: Uint8Array, toFind: Uint8Array): number | undefined {
   for (const char of toFind) {
     const index = str.indexOf(char);
     if (index != -1) return index;
@@ -67,19 +68,19 @@ function firstIndexOf(str: string, toFind: string[]) {
 }
 
 export function parseURL(
-  url: string,
+  url: Uint8Array,
   defaultProtocol: HttpUrlProtocol = HttpUrlProtocol.Http,
-) {
-  let pos = firstIndexOf(url, [":", "/", "?", "#", "@", "[", "]"]);
-  const protocolStr = url.substring(0, pos).toLowerCase();
+): HttpUrl {
+  let pos = firstIndexOf(url, encode(":/?#@[]"));
+  const protocolStr = toLower(url.slice(0, pos));
   pos ??= 0;
 
   let protocol: HttpUrlProtocol;
-  if (url.substring(pos, pos + 3) === "://") {
+  if (areTypedArraysEqual(url.slice(pos, pos + 3), "://")) {
     pos += 3;
-    if (protocolStr === "http") {
+    if (areTypedArraysEqual(protocolStr, "http")) {
       protocol = HttpUrlProtocol.Http;
-    } else if (protocolStr === "https") {
+    } else if (areTypedArraysEqual(protocolStr, "https")) {
       protocol = HttpUrlProtocol.Https;
     } else {
       throw new Error("Unsupported URL protocol");
@@ -89,28 +90,31 @@ export function parseURL(
     protocol = defaultProtocol;
   }
 
-  const fi1 = firstIndexOf(url.substring(pos), ["/", "?", "#"]);
-  const userinfoHostPort = url.substring(pos, fi1 != null ? pos + fi1 : fi1);
+  const fi1 = firstIndexOf(url.slice(pos), encode("/?#"));
+  const userinfoHostPort = url.slice(pos, fi1 != null ? pos + fi1 : fi1);
   const toAdd = fi1 || (url.length - pos);
   pos += toAdd;
 
   let port = 0;
   let colon = pos - 1;
-  while (colon > (pos - toAdd) && url[colon] != ":" && url[colon] != "]" && url[colon] != "@") {
+  while (
+    colon > (pos - toAdd) && url[colon] !== CODEPOINTS[":"] && url[colon] !== CODEPOINTS["]"] &&
+    url[colon] !== CODEPOINTS["@"]
+  ) {
     colon--;
   }
-  let userinfoHost = "";
+  let userinfoHost: Uint8Array;
 
-  if (colon > 0 && url[colon] === ":") {
-    let portSlice = url.substring(colon + 1, pos);
-    while (portSlice.length > 1 && portSlice[0] === "0") {
-      portSlice = portSlice.substring(1);
+  if (colon > 0 && url[colon] === CODEPOINTS[":"]) {
+    let portSlice = url.slice(colon + 1, pos);
+    while (portSlice.length > 1 && portSlice[0] === CODEPOINTS["0"]) {
+      portSlice = portSlice.slice(1);
     }
-    const rPort = parseInt(portSlice);
+    const rPort = toInteger(portSlice);
     if (!rPort || isNaN(rPort) || rPort === 0) port = -1;
     else port = rPort;
 
-    userinfoHost = url.substring(pos - toAdd, colon);
+    userinfoHost = url.slice(pos - toAdd, colon);
   } else {
     userinfoHost = userinfoHostPort;
   }
@@ -118,12 +122,12 @@ export function parseURL(
     throw new Error("Wrong port number specified in the URL");
   }
 
-  const atPos = userinfoHost.indexOf("@");
-  const userinfo = atPos == -1 ? "" : userinfoHost.substring(0, atPos);
-  const host = userinfoHost.substring(atPos + 1);
+  const atPos = userinfoHost.indexOf(CODEPOINTS["@"]);
+  const userinfo = atPos === -1 ? new Uint8Array() : userinfoHost.slice(0, atPos);
+  const host = userinfoHost.slice(atPos + 1);
 
   let isIpv6 = false;
-  if (host.length != 0 && host[0] === "[" && host.at(-1) === "]") {
+  if (host.length !== 0 && host[0] === CODEPOINTS["["] && host.at(-1) === CODEPOINTS["]"]) {
     const ipAddress = new IPAddress();
     try {
       ipAddress.initIpv6Port(host, 1);
@@ -133,15 +137,15 @@ export function parseURL(
     CHECK(ipAddress.isIpv6());
     isIpv6 = true;
   }
-  if (host.length == 0) {
+  if (host.length === 0) {
     throw new Error("URL host is empty");
   }
-  if (host === ".") {
+  if (areTypedArraysEqual(host, ".")) {
     throw new Error("Host is invalid");
   }
 
   const specifiedPort = port;
-  if (port == 0) {
+  if (port === 0) {
     if (protocol == HttpUrlProtocol.Http) {
       port = 80;
     } else {
@@ -150,38 +154,42 @@ export function parseURL(
     }
   }
 
-  let query = url.substring(pos);
-
-  while (query.length != 0 && isSpace(query.at(-1)!)) {
-    query = query.substring(0, query.length - 1);
+  let query = url.slice(pos);
+  while (query.length !== 0 && isSpace(query.at(-1)!)) {
+    query = query.slice(0, query.length - 1);
   }
-  if (query.length == 0) query = "/";
-  let queryStr = "";
-  if (query[0] != "/") {
-    queryStr = "/";
+  if (query.length === 0) {
+    query = encode("/");
   }
-  for (const char of query) {
-    if (char.codePointAt(0)! <= 0x20) {
-      queryStr += "%";
-      queryStr += "0123456789ABCDEF"[Math.floor(char.codePointAt(0)! / 16)];
-      queryStr += "0123456789ABCDEF"[char.codePointAt(0)! % 16];
+  const queryStr_: number[] = [];
+  if (query[0] !== CODEPOINTS["/"]) {
+    queryStr_.push(CODEPOINTS["/"]);
+  }
+  for (const c of query) {
+    if (c <= 0x20) {
+      queryStr_.push(CODEPOINTS["%"]);
+      queryStr_.push(encode("0123456789ABCDEF"[Math.floor(c / 16)])[0]);
+      queryStr_.push(encode("0123456789ABCDEF"[c % 16])[0]);
     } else {
-      queryStr += char;
+      queryStr_.push(c);
     }
   }
+  const queryStr = Uint8Array.from(queryStr_);
 
-  function checkURLPart(part: string, name: string, allowColon: boolean) {
+  function checkURLPart(part: Uint8Array, name: string, allowColon: boolean) {
     for (let i = 0; i < part.length; i++) {
       let c = part[i];
       if (
-        isAlphaOrDigit(c) || c === "." || c === "-" || c === "_" || c === "!" || c === "$" ||
-        c === "," || c === "~" || c === "*" || c === "'" || c === "(" || c === ")" || c === ";" ||
-        c === "&" || c === "+" || c === "=" || (allowColon && c === ":")
+        isAlphaOrDigit(c) || c === CODEPOINTS["."] || c === CODEPOINTS["-"] || c === CODEPOINTS["_"] ||
+        c === CODEPOINTS["!"] || c === CODEPOINTS["$"] ||
+        c === CODEPOINTS[","] || c === CODEPOINTS["~"] || c === CODEPOINTS["*"] || c === CODEPOINTS["'"] ||
+        c === CODEPOINTS["("] || c === CODEPOINTS[")"] || c === CODEPOINTS[";"] ||
+        c === CODEPOINTS["&"] || c === CODEPOINTS["+"] || c === CODEPOINTS["="] || (allowColon && c === CODEPOINTS[":"])
       ) {
         // symbols allowed by RFC 7230 and RFC 3986
         continue;
       }
-      if (c === "%") {
+      if (c === CODEPOINTS["%"]) {
         c = part[++i];
         if (isHexDigit(c)) {
           c = part[++i];
@@ -191,18 +199,21 @@ export function parseURL(
         }
         throw new Error("Wrong percent-encoded symbol in URL " + name);
       }
-      const uc = c.codePointAt(0)!;
+      const uc = c;
       if (uc >= 128) continue;
       throw new Error("Disallowed character in URL " + name);
     }
     return true;
   }
 
-  const hostStr = host.toLowerCase();
+  const hostStr = toLower(host);
   if (isIpv6) {
     for (let i = 1; i + 1 < hostStr.length; i++) {
       const c = hostStr[i];
-      if (c === ":" || ("0" <= c && c <= "9") || ("a" <= c && c <= "f") || c == ".") {
+      if (
+        c === CODEPOINTS[":"] || (CODEPOINTS["0"] <= c && c <= CODEPOINTS["9"]) ||
+        (CODEPOINTS["a"] <= c && c <= CODEPOINTS["f"]) || c === CODEPOINTS["."]
+      ) {
         continue;
       }
       throw new Error("Wrong IPv6 URL host");

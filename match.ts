@@ -35,32 +35,22 @@ import {
   utf8Length,
   utf8Substr,
   utf8ToLower,
+  utf8utf16Length,
+  utf8utf16Substr,
 } from "./utf8.ts";
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 import { equal, unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
+import { decode, encode, toInteger } from "./encode.ts";
 
 export type Position = [number, number];
 
-const encoder = new TextEncoder(), decoder = new TextDecoder();
-
-function encode(data: string) {
-  return encoder.encode(data);
-}
-
-function decode(data: number): string;
-function decode(data: Uint8Array): string;
-function decode(data: number | Uint8Array): string {
-  return decoder.decode(typeof data === "number" ? new Uint8Array([data]) : data);
-}
-
-export function matchMentions(text: string): Position[] {
-  const str = encode(text);
+export function matchMentions(str: Uint8Array): Position[] {
   const result: Position[] = [];
   const begin = 0, end = str.length;
   let position = begin;
 
   while (true) {
-    const atSymbol = str.subarray(position).indexOf(CODEPOINTS["@"]);
+    const atSymbol = str.slice(position).indexOf(CODEPOINTS["@"]);
     if (atSymbol == -1) break;
     position += atSymbol;
 
@@ -74,7 +64,7 @@ export function matchMentions(text: string): Position[] {
       }
     }
     const mentionBegin = ++position;
-    while (position != end && isAlphaDigitOrUnderscore(decode(str[position]))) {
+    while (position != end && isAlphaDigitOrUnderscore(str[position])) {
       position++;
     }
     const mentionEnd = position;
@@ -96,30 +86,31 @@ export function matchMentions(text: string): Position[] {
   return result;
 }
 
-export function matchBotCommands(text: string): Position[] {
-  const str = encode(text);
+export function matchBotCommands(str: Uint8Array): Position[] {
   const result: Position[] = [];
   const begin = 0, end = str.length;
   let position = begin;
 
   while (true) {
-    const slashSymbol = str.subarray(position).indexOf(CODEPOINTS["/"]);
+    const slashSymbol = str.slice(position).indexOf(CODEPOINTS["/"]);
     if (slashSymbol == -1) break;
     position += slashSymbol;
 
     if (position != begin) {
       const prevPos = prevUtf8Unsafe(str, position);
       const { code: prev } = nextUtf8Unsafe(str, prevPos);
-      const prevChar = decode(prev);
 
-      if (isWordCharacter(prev) || prevChar === "/" || prevChar === "<" || prevChar === ">") {
+      if (
+        isWordCharacter(prev) || prev === CODEPOINTS["/"] ||
+        prev === CODEPOINTS["<"] || prev === CODEPOINTS[">"]
+      ) {
         position++;
         continue;
       }
     }
 
     const commandBegin = ++position;
-    while (position != end && isAlphaDigitOrUnderscore(decode(str[position]))) {
+    while (position != end && isAlphaDigitOrUnderscore(str[position])) {
       position++;
     }
     let commandEnd = position;
@@ -128,7 +119,7 @@ export function matchBotCommands(text: string): Position[] {
 
     if (position != end && str[position] === CODEPOINTS["@"]) {
       const mentionBegin = ++position;
-      while (position != end && isAlphaDigitOrUnderscore(decode(str[position]))) {
+      while (position != end && isAlphaDigitOrUnderscore(str[position])) {
         position++;
       }
       const mentionEnd = position;
@@ -144,8 +135,10 @@ export function matchBotCommands(text: string): Position[] {
       const { code } = nextUtf8Unsafe(str, position);
       next = code;
     }
-    const nextChar = decode(next);
-    if (isWordCharacter(next) || nextChar === "/" || nextChar === "<" || nextChar === ">") {
+    if (
+      isWordCharacter(next) || next === CODEPOINTS["/"] ||
+      next === CODEPOINTS["<"] || next === CODEPOINTS[">"]
+    ) {
       continue;
     }
 
@@ -155,8 +148,7 @@ export function matchBotCommands(text: string): Position[] {
   return result;
 }
 
-export function matchHashtags(text: string): Position[] {
-  const str = encode(text);
+export function matchHashtags(str: Uint8Array): Position[] {
   const result: Position[] = [];
   const begin = 0, end = str.length;
   let position = begin;
@@ -164,7 +156,7 @@ export function matchHashtags(text: string): Position[] {
   let category: UnicodeSimpleCategory = 0;
 
   while (true) {
-    const hashSymbol = str.subarray(position).indexOf(CODEPOINTS["#"]);
+    const hashSymbol = str.slice(position).indexOf(CODEPOINTS["#"]);
     if (hashSymbol == -1) break;
     position += hashSymbol;
 
@@ -205,14 +197,13 @@ export function matchHashtags(text: string): Position[] {
   return result;
 }
 
-export function matchCashtags(text: string): Position[] {
-  const str = encode(text);
+export function matchCashtags(str: Uint8Array): Position[] {
   const result: Position[] = [];
   const begin = 0, end = str.length;
   let position = begin;
 
   while (true) {
-    const dollarSymbol = str.subarray(position).indexOf(CODEPOINTS["$"]);
+    const dollarSymbol = str.slice(position).indexOf(CODEPOINTS["$"]);
     if (dollarSymbol == -1) break;
     position += dollarSymbol;
 
@@ -227,7 +218,7 @@ export function matchCashtags(text: string): Position[] {
     }
 
     const cashtagBegin = ++position;
-    if ((end - position) >= 5 && decode(str.subarray(position, position + 5)) === "1INCH") {
+    if ((end - position) >= 5 && areTypedArraysEqual(str.slice(position, position + 5), encode("1INCH"))) {
       position += 5;
     } else {
       while (position != end && CODEPOINTS["Z"] >= str[position] && str[position] >= CODEPOINTS["A"]) {
@@ -252,14 +243,13 @@ export function matchCashtags(text: string): Position[] {
   return result;
 }
 
-export function matchMediaTimestamps(text: string) {
-  const str = encode(text);
+export function matchMediaTimestamps(str: Uint8Array): Position[] {
   const result: Position[] = [];
   const begin = 0, end = str.length;
   let position = begin;
 
   while (true) {
-    const colonSign = str.subarray(position).indexOf(CODEPOINTS[":"]);
+    const colonSign = str.slice(position).indexOf(CODEPOINTS[":"]);
     if (colonSign == -1) break;
     position += colonSign;
 
@@ -306,8 +296,7 @@ export function matchMediaTimestamps(text: string) {
   return result;
 }
 
-export function matchBankCardNumbers(text: string) {
-  const str = encode(text);
+export function matchBankCardNumbers(str: Uint8Array): Position[] {
   const result: Position[] = [];
   const begin = 0, end = str.length;
   let position = begin;
@@ -377,15 +366,14 @@ export function matchBankCardNumbers(text: string) {
   return result;
 }
 
-export function isURLUnicodeSymbol(c: number) {
-  if (0x2000 <= c && c <= 0x206f) {
-    return c == 0x200c || c == 0x200d || (0x2010 <= c && c <= 0x2015);
-  }
-  return getUnicodeSimpleCategory(c) != UnicodeSimpleCategory.Separator;
+export function isURLUnicodeSymbol(codepoint: number): boolean {
+  return 0x2000 <= codepoint && codepoint <= 0x206f
+    ? codepoint == 0x200c || codepoint == 0x200d || (0x2010 <= codepoint && codepoint <= 0x2015)
+    : getUnicodeSimpleCategory(codepoint) != UnicodeSimpleCategory.Separator;
 }
 
-export function isURLPathSymbol(c: number) {
-  switch (c) {
+export function isURLPathSymbol(codepoint: number): boolean {
+  switch (codepoint) {
     case CODEPOINTS["\n"]:
     case CODEPOINTS["<"]:
     case CODEPOINTS[">"]:
@@ -394,20 +382,21 @@ export function isURLPathSymbol(c: number) {
     case 0xbb: // »
       return false;
     default:
-      return isURLUnicodeSymbol(c);
+      return isURLUnicodeSymbol(codepoint);
   }
 }
 
-export function matchTgURLs(text: string) {
-  const str = encode(text);
+const BAD_PATH_END_CHARACTERS = encode(".:;,('?!`");
+
+export function matchTgURLs(str: Uint8Array): Position[] {
   const result: Position[] = [];
   const begin = 0, end = str.length;
   let position = begin;
 
-  const badPathEndChars = encode(".:;,('?!`");
+  const badPathEndChars = BAD_PATH_END_CHARACTERS;
 
   while (end - position > 5) {
-    const colonSymbol = str.subarray(position).indexOf(CODEPOINTS[":"]);
+    const colonSymbol = str.slice(position).indexOf(CODEPOINTS[":"]);
     if (colonSymbol == -1) break;
     position += colonSymbol;
 
@@ -420,8 +409,7 @@ export function matchTgURLs(text: string) {
         urlBegin = position - 2;
       } else if (
         position - begin >= 3 && toLower(str[position - 3]) === CODEPOINTS["t"] &&
-          toLower(str[position - 2]) === CODEPOINTS["o"] ||
-        toLower(str[position - 1]) === CODEPOINTS["n"]
+          toLower(str[position - 2]) === CODEPOINTS["o"] || toLower(str[position - 1]) === CODEPOINTS["n"]
       ) {
         urlBegin = position - 3;
       }
@@ -467,15 +455,14 @@ export function matchTgURLs(text: string) {
   return result;
 }
 
-export function isProtocolSymbol(c: number) {
-  if (c < 0x80) {
-    return isAlphaOrDigit(c) || c == CODEPOINTS["+"] || c == CODEPOINTS["-"];
-  }
-  return getUnicodeSimpleCategory(c) != UnicodeSimpleCategory.Separator;
+export function isProtocolSymbol(codepoint: number): boolean {
+  return codepoint < 0x80
+    ? isAlphaOrDigit(codepoint) || codepoint == CODEPOINTS["+"] || codepoint == CODEPOINTS["-"]
+    : getUnicodeSimpleCategory(codepoint) != UnicodeSimpleCategory.Separator;
 }
 
-export function isUserDataSymbol(c: number) {
-  switch (c) {
+export function isUserDataSymbol(codepoint: number): boolean {
+  switch (codepoint) {
     case CODEPOINTS["\n"]:
     case CODEPOINTS["/"]:
     case CODEPOINTS["["]:
@@ -494,24 +481,22 @@ export function isUserDataSymbol(c: number) {
     case 0xbb: // »
       return false;
     default:
-      return isURLUnicodeSymbol(c);
+      return isURLUnicodeSymbol(codepoint);
   }
 }
 
-export function isDomainSymbol(c: number) {
-  if (c < 0xc0) {
-    return c == CODEPOINTS["."] || isAlphaDigitUnderscoreOrMinus(c) || c == CODEPOINTS["~"];
-  }
-  return isURLUnicodeSymbol(c);
+export function isDomainSymbol(codepoint: number): boolean {
+  return codepoint < 0xc0
+    ? codepoint == CODEPOINTS["."] || isAlphaDigitUnderscoreOrMinus(codepoint) || codepoint == CODEPOINTS["~"]
+    : isURLUnicodeSymbol(codepoint);
 }
 
-export function matchURLs(text: string) {
-  let str = encode(text);
+export function matchURLs(str: Uint8Array): Position[] {
   const result: Position[] = [];
   const begin = 0;
   let end = str.length;
 
-  const badPathEndChars = encode(".:;,('?!`");
+  const badPathEndChars = BAD_PATH_END_CHARACTERS;
 
   let done = 0;
 
@@ -521,7 +506,7 @@ export function matchURLs(text: string) {
     if (dotPos > str.length || dotPos + 1 === str.length) break;
 
     if (str[dotPos + 1] === CODEPOINTS[" "]) {
-      str = str.subarray(dotPos + 2);
+      str = str.slice(dotPos + 2);
       done += dotPos + 2;
       end = str.length;
       continue;
@@ -574,7 +559,7 @@ export function matchURLs(text: string) {
 
       if (
         portBeginPos !== portEndPos && (portEndPos - portBeginPos) <= 5 &&
-        parseInt(decode(str.subarray(portBeginPos, portEndPos))) <= 65535
+        toInteger(str.slice(portBeginPos, portEndPos)) <= 65535
       ) {
         urlEndPos = portEndPos;
       }
@@ -628,7 +613,7 @@ export function matchURLs(text: string) {
     }
 
     if (urlBeginPos !== begin) {
-      const prefix = str.subarray(begin, urlBeginPos);
+      const prefix = str.slice(begin, urlBeginPos);
       if (prefix.length >= 6 && endsWith(prefix, encode("://"))) {
         let protocolBeginPos = urlBeginPos - 3;
         while (protocolBeginPos !== begin) {
@@ -639,7 +624,7 @@ export function matchURLs(text: string) {
             break;
           }
         }
-        const protocol = toLower(str.subarray(protocolBeginPos, urlBeginPos - 3));
+        const protocol = toLower(str.slice(protocolBeginPos, urlBeginPos - 3));
         if (endsWith(protocol, encode("http")) && !areTypedArraysEqual(protocol, encode("shttp"))) {
           urlBeginPos = urlBeginPos - 7;
         } else if (endsWith(protocol, encode("https"))) {
@@ -680,7 +665,7 @@ export function matchURLs(text: string) {
       urlEndPos = begin + dotPos + 1;
     }
 
-    str = str.subarray(urlEndPos - begin);
+    str = str.slice(urlEndPos - begin);
     done += urlEndPos - begin;
     end = str.length;
   }
@@ -688,7 +673,7 @@ export function matchURLs(text: string) {
   return result;
 }
 
-export function isValidBankCard(str: Uint8Array) {
+export function isValidBankCard(str: Uint8Array): boolean {
   const MIN_CARD_LENGTH = 13;
   const MAX_CARD_LENGTH = 19;
   const digits = new Array<number>(MAX_CARD_LENGTH);
@@ -736,7 +721,7 @@ export function isValidBankCard(str: Uint8Array) {
   return true;
 }
 
-export function isEmailAddress(str: Uint8Array) {
+export function isEmailAddress(str: Uint8Array): boolean {
   const [userdata, domain] = split(str, CODEPOINTS["@"]);
   if (!domain || domain.length == 0) return false;
 
@@ -786,9 +771,8 @@ export function isEmailAddress(str: Uint8Array) {
   return true;
 }
 
-export function isCommonTLD(str: Uint8Array) {
-  // deno-fmt-ignore
-  const tlds = [
+// deno-fmt-ignore
+export const COMMON_TLDS = [
     "aaa", "aarp", "abarth", "abb", "abbott", "abbvie", "abc", "able", "abogado", "abudhabi", "ac", "academy",
     "accenture", "accountant", "accountants", "aco", "active", "actor", "ad", "adac", "ads", "adult", "ae", "aeg",
     "aero", "aetna", "af", "afamilycompany", "afl", "africa", "ag", "agakhan", "agency", "ai", "aig", "aigo",
@@ -916,8 +900,9 @@ export function isCommonTLD(str: Uint8Array) {
     "இந்தியா", "հայ", "新加坡", "فلسطين", "政务", "xperia", "xxx", "xyz", "yachts", "yahoo", "yamaxun", "yandex",
     "ye", "yodobashi", "yoga", "yokohama", "you", "youtube", "yt", "yun", "za", "zappos", "zara", "zero", "zip",
     "zippo", "zm", "zone", "zuerich", "zw",
-  ];
+].map((x) => encode(x));
 
+export function isCommonTLD(str: Uint8Array): boolean {
   let isLower = true;
   for (const c of str) {
     const unsigned = ((c - CODEPOINTS["a"]) & 0xFFFFFFFF) >>> 0;
@@ -927,27 +912,27 @@ export function isCommonTLD(str: Uint8Array) {
     }
   }
   if (isLower) {
-    return tlds.includes(decode(str));
+    return COMMON_TLDS.some((tld) => areTypedArraysEqual(tld, str));
   }
 
   const strLower = utf8ToLower(str);
   if (!areTypedArraysEqual(strLower, str) && areTypedArraysEqual(utf8Substr(strLower, 1), utf8Substr(str, 1))) {
     return false;
   }
-  return tlds.includes(decode(strLower));
+  return COMMON_TLDS.some((tld) => areTypedArraysEqual(tld, strLower));
 }
 
 export function fixURL(str: Uint8Array): Uint8Array {
   let fullUrl = str;
 
   let hasProtocol = false;
-  const strBegin = toLower(str.subarray(0, 9));
+  const strBegin = toLower(str.slice(0, 9));
   if (
     beginsWith(strBegin, encode("http://")) || beginsWith(strBegin, encode("https://")) ||
     beginsWith(strBegin, encode("ftp://"))
   ) {
     const pos = str.indexOf(CODEPOINTS[":"]);
-    str = str.subarray(pos + 3);
+    str = str.slice(pos + 3);
     hasProtocol = true;
   }
 
@@ -961,18 +946,18 @@ export function fixURL(str: Uint8Array): Uint8Array {
     maxNegativeOne(str.indexOf(CODEPOINTS["?"]), str.length),
     maxNegativeOne(str.indexOf(CODEPOINTS["#"]), str.length),
   );
-  let domain = str.subarray(0, domainEnd);
-  const path = str.subarray(domainEnd);
+  let domain = str.slice(0, domainEnd);
+  const path = str.slice(domainEnd);
 
   const atPos = domain.indexOf(CODEPOINTS["@"]);
   if (atPos < domain.length) {
-    domain = domain.subarray(atPos + 1);
+    domain = domain.slice(atPos + 1);
   }
   const lastIndexOfColon = domain.lastIndexOf(CODEPOINTS[":"]);
-  domain = domain.subarray(0, lastIndexOfColon === -1 ? undefined : lastIndexOfColon);
+  domain = domain.slice(0, lastIndexOfColon === -1 ? undefined : lastIndexOfColon);
 
   if (domain.length === 12 && (domain[0] === CODEPOINTS["t"] || domain[0] === CODEPOINTS["T"])) {
-    if (decode(toLower(domain)) === "teiegram.org") return new Uint8Array();
+    if (areTypedArraysEqual(toLower(domain), encode("teiegram.org"))) return new Uint8Array();
   }
 
   const balance: [number, number, number] = [0, 0, 0];
@@ -1003,11 +988,11 @@ export function fixURL(str: Uint8Array): Uint8Array {
     }
   }
 
-  const badPathEndChars = encode(".:;,('?!`");
+  const badPathEndChars = BAD_PATH_END_CHARACTERS;
   while (pathPos > 0 && badPathEndChars.includes(path[pathPos - 1])) {
     pathPos--;
   }
-  fullUrl = fullUrl.subarray(0, fullUrl.length - (path.length - pathPos));
+  fullUrl = fullUrl.slice(0, fullUrl.length - (path.length - pathPos));
 
   let prev = 0;
   let domainPartCount = 0;
@@ -1043,12 +1028,12 @@ export function fixURL(str: Uint8Array): Uint8Array {
   if (isIpv4 && domainPartCount == 4) return fullUrl;
   if (!hasNonDigit) return new Uint8Array();
 
-  const tld = domain.subarray(prev);
+  const tld = domain.slice(prev);
   if (utf8Length(tld) <= 1) return new Uint8Array();
 
   if (beginsWith(tld, encode("xn--"))) {
     if (tld.length <= 5) return new Uint8Array();
-    for (const c of tld.subarray(4)) {
+    for (const c of tld.slice(4)) {
       if (!isAlphaOrDigit(c)) return new Uint8Array();
     }
   } else {
@@ -1067,79 +1052,82 @@ export function fixURL(str: Uint8Array): Uint8Array {
   return fullUrl;
 }
 
-export function getValidShortUsernames() {
-  return [
-    "gif",
-    "wiki",
-    "vid",
-    "bing",
-    "pic",
-    "bold",
-    "imdb",
-    "coub",
-    "like",
-    "vote",
-  ];
+const VALID_SHORT_USERNAMES = ["gif", "wiki", "vid", "bing", "pic", "bold", "imdb", "coub", "like", "vote"]
+  .map((username) => encode(username));
+
+export function getValidShortUsernames(): Uint8Array[] {
+  return VALID_SHORT_USERNAMES;
 }
 
-export function findMentions(str: string) {
+export function findMentions(str: Uint8Array): Position[] {
   return matchMentions(str).filter(([start, end]) => {
-    const mention = str.substring(start + 1, end);
-    if (mention.length >= 4) return true;
-    return getValidShortUsernames().includes(mention.toLowerCase());
+    const mention = str.slice(start + 1, end);
+    if (mention.length >= 4) {
+      return true;
+    }
+    const loweredMention = toLower(mention);
+    return getValidShortUsernames()
+      .some((username) => areTypedArraysEqual(loweredMention, username));
   });
 }
 
-export function findBotCommands(str: string) {
+export function findBotCommands(str: Uint8Array): Position[] {
   return matchBotCommands(str);
 }
 
-export function findHashtags(str: string) {
+export function findHashtags(str: Uint8Array): Position[] {
   return matchHashtags(str);
 }
 
-export function findCashtags(str: string) {
+export function findCashtags(str: Uint8Array): Position[] {
   return matchCashtags(str);
 }
 
-export function findBankCardNumbers(str: string) {
+export function findBankCardNumbers(str: Uint8Array): Position[] {
   return matchBankCardNumbers(str).filter(([start, end]) => {
-    return isValidBankCard(encode(str).subarray(start, end));
+    return isValidBankCard(str.slice(start, end));
   });
 }
 
-export function findTgURLs(str: string) {
+export function findTgURLs(str: Uint8Array): Position[] {
   return matchTgURLs(str);
 }
 
-export function findURLs(str: string) {
+export function findURLs(str: Uint8Array): [Position, boolean][] {
   const result: [Position, boolean][] = [];
-  for (const [s, e] of matchURLs(str)) {
-    let url = encode(str).subarray(s, e);
+  for (const [start, end] of matchURLs(str)) {
+    let url = str.slice(start, end);
     if (isEmailAddress(url)) {
-      result.push([[s, e], true]);
-    } else if (beginsWith(url, encode("mailto:")) && isEmailAddress(url.subarray(7))) {
-      result.push([[s + 7, s + url.length], true]);
+      result.push([[start, end], true]);
+    } else if (beginsWith(url, encode("mailto:")) && isEmailAddress(url.slice(7))) {
+      result.push([[start + 7, start + url.length], true]);
     } else {
       url = fixURL(url);
       if (url.length != 0) {
-        result.push([[s, s + url.length], false]);
+        result.push([[start, start + url.length], false]);
       }
     }
   }
   return result;
 }
 
-export function findMediaTimestamps(str: string) {
+export function findMediaTimestamps(str: Uint8Array): [Position, number][] {
   const result: [Position, number][] = [];
   for (const [start, end] of matchMediaTimestamps(str)) {
-    const parts = str.substring(start, end).split(":");
-    if (parts.length > 3 || parts[parts.length - 1].length != 2) continue;
-    const seconds = parseInt(parts[parts.length - 1]);
-    if (seconds >= 60) continue;
+    const parts = fullSplit(str.slice(start, end), CODEPOINTS[":"]);
+    CHECK(parts.length >= 2);
+    if (parts.length > 3 || parts[parts.length - 1].length != 2) {
+      continue;
+    }
+    const seconds = toInteger(parts[parts.length - 1]);
+    if (seconds >= 60) {
+      continue;
+    }
     if (parts.length == 2) {
-      if (parts[0].length > 4 || parts[0].length == 0) continue;
-      const minutes = parseInt(parts[0]);
+      if (parts[0].length > 4 || parts[0].length == 0) {
+        continue;
+      }
+      const minutes = toInteger(parts[0]);
       result.push([[start, end], minutes * 60 + seconds]);
       continue;
     } else {
@@ -1147,20 +1135,22 @@ export function findMediaTimestamps(str: string) {
         parts[0].length > 2 || parts[1].length > 2 ||
         parts[0].length == 0 || parts[1].length == 0
       ) continue;
-      const minutes = parseInt(parts[1]);
-      if (minutes >= 60) continue;
-      const hours = parseInt(parts[0]);
+      const minutes = toInteger(parts[1]);
+      if (minutes >= 60) {
+        continue;
+      }
+      const hours = toInteger(parts[0]);
       result.push([[start, end], hours * 3600 + minutes * 60 + seconds]);
     }
   }
   return result;
 }
 
-export function textLength(text: string) {
-  return text.length;
+export function textLength(text: Uint8Array): number {
+  return utf8utf16Length(text);
 }
 
-export function getTypePriority(type: MessageEntityType) {
+export function getTypePriority(type: MessageEntityType): number {
   const priorities = [
     50, /* Mention */
     50, /* Hashtag */
@@ -1187,7 +1177,7 @@ export function getTypePriority(type: MessageEntityType) {
   return priorities[type];
 }
 
-export function removeEmptyEntities(entities: MessageEntity[]) {
+export function removeEmptyEntities(entities: MessageEntity[]): MessageEntity[] {
   return entities.filter((entity) => {
     if (entity.length <= 0) return false;
     switch (entity.type) {
@@ -1212,9 +1202,7 @@ export function sortEntities(entities: MessageEntity[]) {
       return length > other.length ? -1 : 1;
     }
     const priority = getTypePriority(convertEntityTypeStringToEnum(type));
-    const otherPriority = getTypePriority(
-      convertEntityTypeStringToEnum(other.type),
-    );
+    const otherPriority = getTypePriority(convertEntityTypeStringToEnum(other.type));
     return priority < otherPriority ? -1 : 1;
   });
 }
@@ -1384,8 +1372,6 @@ export function areEntitiesValid(entities: MessageEntity[]): boolean {
   return true;
 }
 
-// IF THE TESTS ARE NOT PASSING THERE IS A VERY HIGH POSSIBILITY
-// THAT THE FAIL MIGHT BE DUE TO THE FOLLOWING FUNCTION.
 export function removeIntersectingEntities(
   entities: MessageEntity[],
 ): MessageEntity[] {
@@ -1410,7 +1396,7 @@ export function removeIntersectingEntities(
 export function removeEntitiesIntersectingBlockquote(
   entities: MessageEntity[],
   blockquoteEntities: MessageEntity[],
-) {
+): MessageEntity[] | undefined {
   checkNonIntersecting(entities);
   checkNonIntersecting(blockquoteEntities);
   if (blockquoteEntities.length == 0) return;
@@ -1448,7 +1434,7 @@ export function removeEntitiesIntersectingBlockquote(
   return entities;
 }
 
-export function fixEntityOffsets(text: string, entities: MessageEntity[]) {
+export function fixEntityOffsets(text: Uint8Array, entities: MessageEntity[]): MessageEntity[] | undefined {
   if (entities.length == 0) return;
   entities = sortEntities(entities);
   entities = removeIntersectingEntities(entities);
@@ -1471,7 +1457,7 @@ export function fixEntityOffsets(text: string, entities: MessageEntity[]) {
     // let skippedCode = 0;
     while (ptr != end && cnt > 0) {
       const c = text[ptr];
-      utf16Pos += 1 + (c.codePointAt(0)! >= 0xf0 ? 1 : 0);
+      utf16Pos += 1 + (c >= 0xf0 ? 1 : 0);
       // skippedCode = text.codePointAt(ptr)!;
       ptr++;
 
@@ -1491,7 +1477,7 @@ export function fixEntityOffsets(text: string, entities: MessageEntity[]) {
 }
 
 export function findEntities(
-  text: string,
+  text: Uint8Array,
   skipBotCommands: boolean,
   skipMediaTimestamps: boolean,
 ): MessageEntity[] {
@@ -1499,7 +1485,7 @@ export function findEntities(
 
   function addEntities(
     type: MessageEntityType,
-    findEntitiesFn: (text: string) => Position[],
+    findEntitiesFn: (text: Uint8Array) => Position[],
   ) {
     const newEntities = findEntitiesFn(text);
     for (const entity of newEntities) {
@@ -1545,7 +1531,7 @@ export function findEntities(
   return entities;
 }
 
-export function findMediaTimestampEntities(text: string) {
+export function findMediaTimestampEntities(text: Uint8Array) {
   let entities: MessageEntity[] = [];
 
   const mediaTimestamps = findMediaTimestamps(text);
@@ -1603,19 +1589,19 @@ export function mergeEntities(
   return result;
 }
 
-export function isPlainDomain(url: string) {
-  return url.indexOf("/") >= url.length && url.indexOf("?") >= url.length &&
-    url.indexOf("#") >= url.length;
+export function isPlainDomain(url: Uint8Array) {
+  return url.indexOf(CODEPOINTS["/"]) >= url.length && url.indexOf(CODEPOINTS["?"]) >= url.length &&
+    url.indexOf(CODEPOINTS["#"]) >= url.length;
 }
 
 // I know originally this is a class, but for now this'll work.
 export interface FormattedText {
-  text: string;
+  text: Uint8Array;
   entities: MessageEntity[];
 }
 
-export function getFirstUrl({ text, entities }: FormattedText) {
-  for (const entity of entities) {
+export function getFirstUrl(text: FormattedText) {
+  for (const entity of text.entities) {
     switch (entity.type) {
       case "mention":
       case "hashtag":
@@ -1624,13 +1610,12 @@ export function getFirstUrl({ text, entities }: FormattedText) {
         break;
       case "url": {
         if (entity.length <= 4) continue;
-        const url = text.substring(
-          entity.offset,
-          entity.offset + entity.length,
-        );
-        const scheme = url.substring(0, 4).toLowerCase();
+        const url = utf8utf16Substr(text.text, entity.offset, entity.length);
+        const scheme = toLower(url.slice(0, 4));
         if (
-          scheme === "ton:" || scheme === "ftp:" || scheme.startsWith("tg:") ||
+          areTypedArraysEqual(scheme, encode("ton:")) ||
+          beginsWith(scheme, encode("tg:")) ||
+          areTypedArraysEqual(scheme, encode("ftp:")) ||
           isPlainDomain(url)
         ) continue;
         return url;
@@ -1651,10 +1636,7 @@ export function getFirstUrl({ text, entities }: FormattedText) {
         break;
       case "text_link": {
         const url = entity.url;
-        if (
-          url.startsWith("ton:") || url.startsWith("tg:") ||
-          url.startsWith("ftp:")
-        ) continue;
+        if (beginsWith(url, "ton:") || beginsWith(url, "tg:") || beginsWith(url, "ftp:")) continue;
         return url;
       }
       case "text_mention":
@@ -1666,57 +1648,57 @@ export function getFirstUrl({ text, entities }: FormattedText) {
   return "";
 }
 
-export function parseMarkdown(input: string): FormattedText {
-  const text = encoder.encode(input);
+export function parseMarkdown(text: Uint8Array): FormattedText {
   let resultSize = 0;
   const entities: MessageEntity[] = [];
   const size = text.length;
-  let offset = 0;
+  let utf16Offset = 0;
 
   for (let i = 0; i < size; i++) {
-    const c = decode(text[i]),
-      codepoint = text[i],
-      next = decode(text[i + 1]);
-    if (c === "\\" && (next === "_" || next === "*" || next === "`" || next === "[")) {
+    const c = text[i], codepoint = text[i], next = text[i + 1];
+    if (
+      c === CODEPOINTS["\\"] &&
+      (next === CODEPOINTS["_"] || next === CODEPOINTS["*"] || next === CODEPOINTS["`"] || next === CODEPOINTS["["])
+    ) {
       i++;
       text[resultSize++] = text[i];
-      offset++;
+      utf16Offset++;
       continue;
     }
 
-    if (c !== "_" && c !== "*" && c !== "`" && c !== "[") {
+    if (c !== CODEPOINTS["_"] && c !== CODEPOINTS["*"] && c !== CODEPOINTS["`"] && c !== CODEPOINTS["["]) {
       if (isUTF8CharacterFirstCodeUnit(codepoint)) {
-        offset += 1 + ((codepoint >= 0xf0) ? 1 : 0);
+        utf16Offset += 1 + ((codepoint >= 0xf0) ? 1 : 0);
       }
       text[resultSize++] = text[i];
       continue;
     }
 
     const beginPos = i;
-    let endCharacter = decode(text[i]);
+    let endCharacter = text[i];
     let isPre = false;
-    if (c === "[") endCharacter = "]";
+    if (c === CODEPOINTS["["]) endCharacter = CODEPOINTS["]"];
 
     i++;
 
-    let language: string | undefined = undefined;
-    if (c === "`" && decode(text[i]) === "`" && decode(text[i + 1]) === "`") {
+    let language: Uint8Array | undefined = undefined;
+    if (c === CODEPOINTS["`"] && text[i] === CODEPOINTS["`"] && text[i + 1] === CODEPOINTS["`"]) {
       i += 2;
       isPre = true;
       let languageEnd = i;
 
-      while (!isSpace(decode(text[languageEnd])) && decode(text[languageEnd]) != "`") {
+      while (!isSpace(text[languageEnd]) && text[languageEnd] !== CODEPOINTS["`"]) {
         languageEnd++;
       }
 
-      if (i != languageEnd && languageEnd < size && decode(text[languageEnd]) != "`") {
-        language = decoder.decode(text.slice(i, languageEnd));
+      if (i != languageEnd && languageEnd < size && text[languageEnd] !== CODEPOINTS["`"]) {
+        language = text.slice(i, languageEnd);
         i = languageEnd;
       }
 
-      const current = decode(text[i]), next = decode(text[i + 1]);
-      if (current === "\n" || current === "\r") {
-        if ((next === "\n" || next === "\r") && current != next) {
+      const current = text[i], next = text[i + 1];
+      if (current === CODEPOINTS["\n"] || current === CODEPOINTS["\r"]) {
+        if ((next === CODEPOINTS["\n"] || next === CODEPOINTS["\r"]) && current !== next) {
           i += 2;
         } else {
           i++;
@@ -1724,15 +1706,15 @@ export function parseMarkdown(input: string): FormattedText {
       }
     }
 
-    const entityOffset = offset;
+    const entityOffset = utf16Offset;
     while (
       i < size &&
-      (decode(text[i]) !== endCharacter ||
-        (isPre && !(decode(text[i + 1]) === "`" && decode(text[i + 2]) === "`")))
+      (text[i] !== endCharacter ||
+        (isPre && !(text[i + 1] === CODEPOINTS["`"] && text[i + 2] === CODEPOINTS["`"])))
     ) {
       const curCh = text[i];
       if (isUTF8CharacterFirstCodeUnit(curCh)) {
-        offset += 1 + (curCh >= 0xf0 ? 1 : 0);
+        utf16Offset += 1 + (curCh >= 0xf0 ? 1 : 0);
       }
       text[resultSize++] = text[i++];
     }
@@ -1741,76 +1723,47 @@ export function parseMarkdown(input: string): FormattedText {
       throw new Error("Can't find end of the entity starting at byte offset " + beginPos);
     }
 
-    if (entityOffset != offset) {
-      const entityLength = offset - entityOffset;
+    if (entityOffset != utf16Offset) {
+      const entityLength = utf16Offset - entityOffset;
       switch (c) {
-        case "_":
-          entities.push({
-            type: "italic",
-            offset: entityOffset,
-            length: entityLength,
-          });
+        case CODEPOINTS["_"]:
+          entities.push({ type: "italic", offset: entityOffset, length: entityLength });
           break;
-        case "*":
-          entities.push({
-            type: "bold",
-            offset: entityOffset,
-            length: entityLength,
-          });
+        case CODEPOINTS["*"]:
+          entities.push({ type: "bold", offset: entityOffset, length: entityLength });
           break;
-        case "[": {
-          let url = "";
-          if (decode(text[i + 1]) !== "(") {
-            url = decoder.decode(text.slice(beginPos + 1, i));
+        case CODEPOINTS["["]: {
+          let url = new Uint8Array();
+          if (text[i + 1] !== CODEPOINTS["("]) {
+            url = text.slice(beginPos + 1, i);
           } else {
             i += 2;
-            while (i < size && decode(text[i]) !== ")") {
-              url += decode(text[i++]);
+            const url_: number[] = [];
+            while (i < size && text[i] !== CODEPOINTS[")"]) {
+              url_.push(text[i++]);
             }
+            url = Uint8Array.from(url_);
           }
           const userId = LinkManager.getLinkUserId(url);
           if (userId.isValid()) {
-            entities.push({
-              type: "text_mention",
-              offset: entityOffset,
-              length: entityLength,
-              user_id: userId,
-            });
+            entities.push({ type: "text_mention", offset: entityOffset, length: entityLength, user_id: userId });
           } else {
             url = LinkManager.getCheckedLink(url);
             if (url.length != 0) {
-              entities.push({
-                type: "text_link",
-                offset: entityOffset,
-                length: entityLength,
-                url: url,
-              });
+              entities.push({ type: "text_link", offset: entityOffset, length: entityLength, url: url });
             }
           }
           break;
         }
-        case "`":
+        case CODEPOINTS["`"]:
           if (isPre) {
-            if (language == null || language.trim() === "") {
-              entities.push({
-                type: "pre",
-                offset: entityOffset,
-                length: entityLength,
-              });
+            if (language == null || language.length === 0) {
+              entities.push({ type: "pre", offset: entityOffset, length: entityLength });
             } else {
-              entities.push({
-                type: "pre_code",
-                offset: entityOffset,
-                length: entityLength,
-                language,
-              });
+              entities.push({ type: "pre_code", offset: entityOffset, length: entityLength, language });
             }
           } else {
-            entities.push({
-              type: "code",
-              offset: entityOffset,
-              length: entityLength,
-            });
+            entities.push({ type: "code", offset: entityOffset, length: entityLength });
           }
           break;
         default:
@@ -1818,22 +1771,23 @@ export function parseMarkdown(input: string): FormattedText {
       }
     }
 
-    if (isPre) i += 2;
+    if (isPre) {
+      i += 2;
+    }
   }
 
-  return { text: decoder.decode(text.slice(0, resultSize)), entities };
+  return { text: text.slice(0, resultSize), entities };
 }
 
 export interface EntityInfo {
   type: MessageEntityType;
-  argument: string;
+  argument: Uint8Array;
   entityOffset: number;
   entityByteOffset: number;
   entityBeginPos: number;
 }
 
-export function parseMarkdownV2(input: string): FormattedText {
-  const text = encoder.encode(input);
+export function parseMarkdownV2(text: Uint8Array): FormattedText {
   let resultSize = 0;
   let entities: MessageEntity[] = [];
   let utf16Offset = 0;
@@ -1841,62 +1795,58 @@ export function parseMarkdownV2(input: string): FormattedText {
   const nestedEntities: EntityInfo[] = [];
 
   for (let i = 0; i < text.length; i++) {
-    const c = decode(text[i]), codepoint = text[i];
-    if (
-      c === "\\" &&
-      text[i + 1] != null && text[i + 1] > 0 && text[i + 1] <= 126
-    ) {
+    const c = text[i];
+    if (c === CODEPOINTS["\\"] && text[i + 1] != null && text[i + 1] > 0 && text[i + 1] <= 126) {
       i++;
       utf16Offset += 1;
       text[resultSize++] = text[i];
       continue;
     }
 
-    let reservedCharacters = ["_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"];
+    let reservedCharacters = encode("_*[]()~`>#+-=|{}.!");
     if (nestedEntities.length != 0) {
       switch (nestedEntities[nestedEntities.length - 1].type) {
         case MessageEntityType.Code:
         case MessageEntityType.Pre:
         case MessageEntityType.PreCode:
-          reservedCharacters = ["`"];
+          reservedCharacters = encode("`");
           break;
         default:
           break;
       }
     }
 
-    if (!reservedCharacters.includes(c)) {
-      if (isUTF8CharacterFirstCodeUnit(codepoint)) {
-        utf16Offset += 1 + (codepoint >= 0xf0 ? 1 : 0);
+    if (!reservedCharacters.includes(text[i])) {
+      if (isUTF8CharacterFirstCodeUnit(c)) {
+        utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
       }
       text[resultSize++] = text[i];
       continue;
     }
 
     let isEndOfAnEntity = false;
-    if (nestedEntities.length != 0) {
+    if (nestedEntities.length !== 0) {
       isEndOfAnEntity = (() => {
-        const nextChar = decode(text[i + 1]);
         switch (nestedEntities[nestedEntities.length - 1].type) {
           case MessageEntityType.Bold:
-            return c === "*";
+            return c === CODEPOINTS["*"];
           case MessageEntityType.Italic:
-            return c === "_" && nextChar !== "_";
+            return c === CODEPOINTS["_"] && text[i + 1] !== CODEPOINTS["_"];
           case MessageEntityType.Code:
-            return c === "`";
+            return c === CODEPOINTS["`"];
           case MessageEntityType.Pre:
           case MessageEntityType.PreCode:
-            return c === "`" && nextChar === "`" && decode(text[i + 2]) === "`";
+            return c === CODEPOINTS["`"] && text[i + 1] === CODEPOINTS["`"] && text[i + 2] === CODEPOINTS["`"];
           case MessageEntityType.TextUrl:
-            return c === "]";
+            return c === CODEPOINTS["]"];
           case MessageEntityType.Underline:
-            return c === "_" && nextChar === "_";
+            return c === CODEPOINTS["_"] && text[i + 1] === CODEPOINTS["_"];
           case MessageEntityType.Strikethrough:
-            return c === "~";
+            return c === CODEPOINTS["~"];
           case MessageEntityType.Spoiler:
-            return c === "|" && nextChar === "|";
+            return c === CODEPOINTS["|"] && text[i + 1] === CODEPOINTS["|"];
           case MessageEntityType.CustomEmoji:
-            return c === "]";
+            return c === CODEPOINTS["]"];
           default:
             unreachable();
         }
@@ -1905,52 +1855,51 @@ export function parseMarkdownV2(input: string): FormattedText {
 
     if (!isEndOfAnEntity) {
       let type: MessageEntityType;
-      let argument = "";
+      let argument = new Uint8Array();
       const entityByteOffset = i;
-      const nextChar = decode(text[i + 1]);
 
       switch (c) {
-        case "_":
-          if (nextChar === "_") {
+        case CODEPOINTS["_"]:
+          if (text[i + 1] === CODEPOINTS["_"]) {
             type = MessageEntityType.Underline;
             i++;
           } else {
             type = MessageEntityType.Italic;
           }
           break;
-        case "*":
+        case CODEPOINTS["*"]:
           type = MessageEntityType.Bold;
           break;
-        case "~":
+        case CODEPOINTS["~"]:
           type = MessageEntityType.Strikethrough;
           break;
-        case "|":
-          if (nextChar === "|") {
+        case CODEPOINTS["|"]:
+          if (text[i + 1] === CODEPOINTS["|"]) {
             i++;
             type = MessageEntityType.Spoiler;
           } else {
-            throw new Error(`Character '${c}' is reserved and must be escaped with the preceding '\\'`);
+            throw new Error(`Character '${decode(c)}' is reserved and must be escaped with the preceding '\\'`);
           }
           break;
-        case "[":
+        case CODEPOINTS["["]:
           type = MessageEntityType.TextUrl;
           break;
-        case "`":
-          if (nextChar === "`" && decode(text[i + 2]) === "`") {
+        case CODEPOINTS["`"]:
+          if (text[i + 1] === CODEPOINTS["`"] && text[i + 2] === CODEPOINTS["`"]) {
             i += 3;
             type = MessageEntityType.Pre;
             let languageEnd = i;
-            while (!isSpace(decode(text[languageEnd])) && decode(text[languageEnd]) !== "`") {
+            while (text[languageEnd] != null && !isSpace(text[languageEnd]) && text[languageEnd] !== CODEPOINTS["`"]) {
               languageEnd++;
             }
-            if (i != languageEnd && languageEnd < text.length && decode(text[languageEnd]) !== "`") {
+            if (i !== languageEnd && languageEnd < text.length && text[languageEnd] !== CODEPOINTS["`"]) {
               type = MessageEntityType.PreCode;
-              argument = decoder.decode(text.slice(i, languageEnd));
+              argument = text.slice(i, languageEnd);
               i = languageEnd;
             }
-            const current = decode(text[i]), next = decode(text[i + 1]);
-            if (current === "\n" || current === "\r") {
-              if ((next === "\n" || next === "\r") && current !== next) {
+            const current = text[i], next = text[i + 1];
+            if (current === CODEPOINTS["\n"] || current === CODEPOINTS["\r"]) {
+              if ((next === CODEPOINTS["\n"] || next === CODEPOINTS["\r"]) && current !== next) {
                 i += 2;
               } else {
                 i++;
@@ -1962,16 +1911,16 @@ export function parseMarkdownV2(input: string): FormattedText {
             type = MessageEntityType.Code;
           }
           break;
-        case "!":
-          if (nextChar === "[") {
+        case CODEPOINTS["!"]:
+          if (text[i + 1] === CODEPOINTS["["]) {
             i++;
             type = MessageEntityType.CustomEmoji;
           } else {
-            throw new Error(`Character '${c}' is reserved and must be escaped with the preceding '\\'`);
+            throw new Error(`Character '${decode(c)}' is reserved and must be escaped with the preceding '\\'`);
           }
           break;
         default:
-          throw new Error(`Character '${c}' is reserved and must be escaped with the preceding '\\'`);
+          throw new Error(`Character '${decode(c)}' is reserved and must be escaped with the preceding '\\'`);
       }
 
       nestedEntities.push({ type, argument, entityOffset: utf16Offset, entityByteOffset, entityBeginPos: resultSize });
@@ -1995,28 +1944,31 @@ export function parseMarkdownV2(input: string): FormattedText {
           i += 2;
           break;
         case MessageEntityType.TextUrl: {
-          let url = "";
-          if (decode(text[i + 1]) !== "(") {
-            url = decoder.decode(text.slice(nestedEntities.at(-1)!.entityBeginPos, resultSize));
+          let url: Uint8Array;
+          if (text[i + 1] !== CODEPOINTS["("]) {
+            url = text.slice(nestedEntities.at(-1)!.entityBeginPos, resultSize);
           } else {
             i += 2;
             const urlBeginPos = i;
-            while (i < text.length && decode(text[i]) !== ")") {
-              if (decode(text[i]) === "\\" && text[i + 1] > 0 && text[i + 1] <= 126) {
-                url += decode(text[i + 1]);
+            const url_: number[] = [];
+            while (i < text.length && text[i] !== CODEPOINTS[")"]) {
+              if (text[i] === CODEPOINTS["\\"] && text[i + 1] > 0 && text[i + 1] <= 126) {
+                url_.push(text[i + 1]);
                 i += 2;
                 continue;
               }
-              url += decode(text[i++]);
+              url_.push(text[i++]);
             }
-            if (decode(text[i]) !== ")") {
+            url = Uint8Array.from(url_);
+
+            if (text[i] !== CODEPOINTS[")"]) {
               throw new Error("Can't find end of a URL at byte offset " + urlBeginPos);
             }
           }
           userId = LinkManager.getLinkUserId(url);
           if (!userId.isValid()) {
             url = LinkManager.getCheckedLink(url);
-            if (url.length == 0) {
+            if (url.length === 0) {
               skipEntity = true;
             } else {
               argument = url;
@@ -2025,21 +1977,23 @@ export function parseMarkdownV2(input: string): FormattedText {
           break;
         }
         case MessageEntityType.CustomEmoji: {
-          if (decode(text[i + 1]) !== "(") {
+          if (text[i + 1] !== CODEPOINTS["("]) {
             throw new Error("Custom emoji entity must contain a tg://emoji URL");
           }
           i += 2;
-          let url = "";
+          const url_: number[] = [];
           const urlBeginPos = i;
-          while (i < text.length && decode(text[i]) !== ")") {
-            if (decode(text[i]) === "\\" && text[i + 1] > 0 && text[i + 1] <= 126) {
-              url += decode(text[i + 1]);
+          while (i < text.length && text[i] !== CODEPOINTS[")"]) {
+            if (text[i] === CODEPOINTS["\\"] && text[i + 1] > 0 && text[i + 1] <= 126) {
+              url_.push(text[i + 1]);
               i += 2;
               continue;
             }
-            url += decode(text[i++]);
+            url_.push(text[i++]);
           }
-          if (decode(text[i]) !== ")") {
+          const url = Uint8Array.from(url_);
+
+          if (text[i] !== CODEPOINTS[")"]) {
             throw new Error("Can't find end of a custom emoji URL at byte offset " + urlBeginPos);
           }
           customEmojiId = LinkManager.getLinkCustomEmojiId(url);
@@ -2092,48 +2046,53 @@ export function parseMarkdownV2(input: string): FormattedText {
 
   entities = sortEntities(entities);
 
-  return { text: decoder.decode(text.slice(0, resultSize)), entities };
+  return { text: text.slice(0, resultSize), entities };
+}
+
+// deno-lint-ignore no-explicit-any
+function isUint8Array(x: any): x is Uint8Array {
+  return x.BYTES_PER_ELEMENT === 1 && x.byteLength != null && x.length != null && x.subarray != null &&
+    ArrayBuffer.isView(x.buffer);
 }
 
 export function decodeHTMLEntity(text: Uint8Array, pos: number) {
-  CHECK(decode(text[pos]) === "&");
+  CHECK(text[pos] === CODEPOINTS["&"]);
   let endPos = pos + 1;
   let res = 0;
-
-  if (decode(text[pos + 1]) === "#") {
+  if (text[pos + 1] === CODEPOINTS["#"]) {
     endPos++;
-    if (decode(text[pos + 2]) === "x") {
+    if (text[pos + 2] === CODEPOINTS["x"]) {
       endPos++;
-      while (isHexDigit(decode(text[endPos]))) {
-        res = res * 16 + hexToInt(decode(text[endPos++]));
+      while (isHexDigit(text[endPos])) {
+        res = res * 16 + hexToInt(text[endPos++]);
       }
     } else {
-      while (isDigit(decode(text[endPos]))) {
-        res = res * 10 + text[endPos++] - "0".codePointAt(0)!;
+      while (isDigit(text[endPos])) {
+        res = res * 10 + text[endPos++] - CODEPOINTS["0"];
       }
     }
     if (res == 0 || res >= 0x10ffff || endPos - pos >= 10) {
       return 0;
     }
   } else {
-    while (isAlpha(decode(text[endPos]))) {
+    while (isAlpha(text[endPos])) {
       endPos++;
     }
-    const entity = decoder.decode(text.slice(pos + 1, endPos));
-    if (entity === "lt") {
-      res = encoder.encode("<")[0];
-    } else if (entity === "gt") {
-      res = encoder.encode(">")[0];
-    } else if (entity === "amp") {
-      res = encoder.encode("&")[0];
-    } else if (entity === "quot") {
-      res = encoder.encode('"')[0];
+    const entity = text.slice(pos + 1, endPos);
+    if (areTypedArraysEqual(entity, "lt")) {
+      res = CODEPOINTS["<"];
+    } else if (areTypedArraysEqual(entity, "gt")) {
+      res = CODEPOINTS[">"];
+    } else if (areTypedArraysEqual(entity, "amp")) {
+      res = CODEPOINTS["&"];
+    } else if (areTypedArraysEqual(entity, "quot")) {
+      res = CODEPOINTS['"'];
     } else {
       return 0;
     }
   }
 
-  if (decode(text[endPos]) === ";") {
+  if (text[endPos] === CODEPOINTS[";"]) {
     pos = endPos + 1;
   } else {
     pos = endPos;
@@ -2142,8 +2101,8 @@ export function decodeHTMLEntity(text: Uint8Array, pos: number) {
   return { res, pos };
 }
 
-export function parseHTML(str_: string) {
-  const text = encoder.encode(str_);
+export function parseHTML(str: Uint8Array) {
+  const text = str;
   const strSize = text.byteLength;
   let resultEnd = 0;
   const resultBegin = 0;
@@ -2153,8 +2112,8 @@ export function parseHTML(str_: string) {
   let needRecheckUTF8 = false;
 
   interface EntityInfo {
-    tagName: string;
-    argument: string;
+    tagName: Uint8Array;
+    argument: Uint8Array;
     entityOffset: number;
     entityBeginPos: number;
   }
@@ -2162,8 +2121,8 @@ export function parseHTML(str_: string) {
   const nestedEntities: EntityInfo[] = [];
 
   for (let i = 0; i < strSize; i++) {
-    const c = decode(text[i]), c_ = text[i];
-    if (c === "&") {
+    const c = text[i];
+    if (c === CODEPOINTS["&"]) {
       const code = decodeHTMLEntity(text, i);
       if (code != 0) {
         i += code.pos;
@@ -2177,85 +2136,86 @@ export function parseHTML(str_: string) {
         continue;
       }
     }
-    if (c !== "<") {
-      if (isUTF8CharacterFirstCodeUnit(c_)) {
-        utf16Offset += 1 + (c_ >= 0xf0 ? 1 : 0);
+    if (c !== CODEPOINTS["<"]) {
+      if (isUTF8CharacterFirstCodeUnit(c)) {
+        utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
       }
-      text[resultEnd++] = c_;
+      text[resultEnd++] = c;
       continue;
     }
 
     const beginPos = i++;
-    if (decode(text[i]) !== "/") {
-      while (!isSpace(decode(text[i])) && decode(text[i]) !== ">") {
+    if (text[i] !== CODEPOINTS["/"]) {
+      while (!isSpace(text[i]) && text[i] !== CODEPOINTS[">"]) {
         i++;
       }
       if (text[i] == 0) {
         throw new Error("Unclosed start tag at byte offset " + beginPos);
       }
 
-      const tagName = decoder.decode(text.slice(beginPos + 1, i)).toLowerCase();
+      const tagName = toLower(text.slice(beginPos + 1, i));
+
       if (
-        tagName !== "a" && tagName !== "b" && tagName !== "strong" && tagName !== "i" && tagName !== "em" &&
-        tagName !== "s" && tagName !== "strike" && tagName !== "del" && tagName !== "u" && tagName !== "ins" &&
-        tagName !== "tg-spoiler" && tagName !== "tg-emoji" && tagName !== "span" && tagName !== "pre" &&
-        tagName !== "code"
+        // deno-fmt-ignore
+        !["a", "b", "strong", "i", "em", "s", "strike", "del", "u", "ins", "tg-spoiler", "tg-emoji", "span", "pre", "code"]
+          .some((tag) => areTypedArraysEqual(tagName, tag))
       ) {
-        throw new Error(`Unsupported start tag "${tagName}" at byte offset ${beginPos}`);
+        throw new Error(`Unsupported start tag "${decode(tagName)}" at byte offset ${beginPos}`);
       }
 
-      let argument = "";
-      while (decode(text[i]) !== ">") {
-        while (text[i] !== 0 && isSpace(decode(text[i]))) {
+      let argument = new Uint8Array();
+      while (text[i] !== CODEPOINTS[">"]) {
+        while (text[i] !== 0 && isSpace(text[i])) {
           i++;
         }
-        if (decode(text[i]) === ">") {
+        if (text[i] === CODEPOINTS[">"]) {
           break;
         }
         const attributeBeginPos = i;
-        while (!isSpace(decode(text[i])) && decode(text[i]) !== "=") {
+        while (!isSpace(text[i]) && text[i] !== CODEPOINTS["="]) {
           i++;
         }
-        const attributeName = decoder.decode(text.slice(attributeBeginPos, i));
-        if (attributeName.length == 0) {
-          throw new Error(`Empty attribute name in the tag "${tagName}" at byte offset ${attributeBeginPos}`);
+        const attributeName = text.slice(attributeBeginPos, i);
+        if (attributeName.length === 0) {
+          throw new Error(`Empty attribute name in the tag "${decode(tagName)}" at byte offset ${attributeBeginPos}`);
         }
-        while (text[i] != 0 && isSpace(decode(text[i]))) {
+        while (text[i] != 0 && isSpace(text[i])) {
           i++;
         }
-        if (decode(text[i]) !== "=") {
+        if (text[i] !== CODEPOINTS["="]) {
           throw new Error(
-            `Expected equal sign in declaration of an attribute of the tag "${tagName}" at byte offset ${beginPos}`,
+            `Expected equal sign in declaration of an attribute of the tag "${
+              decode(tagName)
+            }" at byte offset ${beginPos}`,
           );
         }
         i++;
-        while (text[i] != 0 && isSpace(decode(text[i]))) {
+        while (text[i] != 0 && isSpace(text[i])) {
           i++;
         }
         if (text[i] == 0) {
-          throw new Error(`Unclosed start tag "${tagName}" at byte offset ${beginPos}`);
+          throw new Error(`Unclosed start tag "${decode(tagName)}" at byte offset ${beginPos}`);
         }
 
-        let attributeValue = "";
-        if (decode(text[i]) !== "'" && decode(text[i]) !== '"') {
+        let attributeValue = new Uint8Array();
+        if (text[i] !== CODEPOINTS["'"] && text[i] !== CODEPOINTS['"']) {
           const tokenBeginPos = i;
-          while (
-            isAlphaOrDigit(decode(text[i])) || decode(text[i]) === "." || decode(text[i]) === "-"
-          ) {
+          while (isAlphaOrDigit(text[i]) || text[i] === CODEPOINTS["."] || text[i] === CODEPOINTS["-"]) {
             i++;
           }
-          attributeValue = decoder.decode(text.slice(tokenBeginPos, i)).toLowerCase();
-          if (!isSpace(decode(text[i])) && decode(text[i]) !== ">") {
+          attributeValue = toLower(text.slice(tokenBeginPos, i));
+          if (!isSpace(text[i]) && text[i] !== CODEPOINTS[">"]) {
             throw new Error(`Unexpected end of name token at byte offset ${tokenBeginPos}`);
           }
         } else {
           const endCharacter = text[i++];
-          let attributeEnd = text[i];
+          let attributeEnd = str[i];
           const attributeBegin = attributeEnd;
-          while (text[i] != endCharacter && text[i] != 0) {
-            if (decode(text[i]) === "&") {
-              const code = decodeHTMLEntity(text, i);
-              if (code != 0) {
+          while (text[i] !== endCharacter && text[i] !== 0) {
+            if (text[i] === CODEPOINTS["&"]) {
+              const code = decodeHTMLEntity(str, i);
+              if (code !== 0) {
+                i += code.pos;
                 attributeEnd = appendUTF8CharacterUnsafe(text, attributeEnd, code.res);
                 continue;
               }
@@ -2266,72 +2226,81 @@ export function parseHTML(str_: string) {
           if (text[i] == endCharacter) {
             i++;
           }
-          attributeValue = decoder.decode(text.slice(attributeBegin, attributeEnd));
+          attributeValue = text.slice(attributeBegin, attributeEnd);
         }
         if (text[i] == 0) {
           throw new Error("Unclosed start tag at byte offset " + beginPos);
         }
 
-        if (tagName === "a" && attributeName === "href") {
+        if (areTypedArraysEqual(tagName, "a") && areTypedArraysEqual(attributeName, "href")) {
           argument = attributeValue;
-        } else if (tagName === "code" && attributeName === "class" && attributeValue.startsWith("language-")) {
-          argument = attributeValue.substring(9);
-        } else if (tagName === "span" && attributeName === "class" && attributeValue.startsWith("tg-")) {
-          argument = attributeValue.substring(3);
-        } else if (tagName === "tg-emoji" && attributeName === "emoji-id") {
+        } else if (
+          areTypedArraysEqual(tagName, "code") && areTypedArraysEqual(attributeName, "class") &&
+          beginsWith(attributeValue, "language-")
+        ) {
+          argument = attributeValue.slice(9);
+        } else if (
+          areTypedArraysEqual(tagName, "span") && areTypedArraysEqual(attributeName, "class") &&
+          beginsWith(attributeValue, "tg-")
+        ) {
+          argument = attributeValue.slice(3);
+        } else if (areTypedArraysEqual(tagName, "tg-emoji") && areTypedArraysEqual(attributeName, "emoji-id")) {
           argument = attributeValue;
         }
       }
 
-      if (tagName === "span" && argument !== "spoiler") {
+      if (areTypedArraysEqual(tagName, "span") && areTypedArraysEqual(argument, "spoiler")) {
         throw new Error(`Tag "span" must have class "tg-spoiler" at byte offset ${beginPos}`);
       }
 
-      nestedEntities.push({
-        tagName,
-        argument,
-        entityOffset: utf16Offset,
-        entityBeginPos: resultEnd - resultBegin,
-      });
+      nestedEntities.push({ tagName, argument, entityOffset: utf16Offset, entityBeginPos: resultEnd - resultBegin });
     } else {
-      if (nestedEntities.length == 0) {
+      if (nestedEntities.length === 0) {
         throw new Error(`Unexpected end tag at byte offset ${beginPos}`);
       }
 
-      if (!isSpace(decode(text[i])) && decode(text[i]) !== ">") {
+      if (!isSpace(text[i]) && text[i] !== CODEPOINTS[">"]) {
         i++;
       }
-      const endTagName = decoder.decode(text.slice(beginPos + 2, i)).toLowerCase();
-      while (isSpace(decode(text[i])) && text[i] != 0) {
+      const endTagName = toLower(text.slice(beginPos + 2, i));
+      while (isSpace(text[i]) && text[i] !== 0) {
         i++;
       }
-      if (decode(text[i]) !== ">") {
+      if (text[i] !== CODEPOINTS[">"]) {
         throw new Error(`Unclosed end tag at byte offset ${beginPos}`);
       }
 
       const tagName = nestedEntities[nestedEntities.length - 1].tagName;
-      if (endTagName.length != 0 && endTagName !== tagName) {
+      if (endTagName.length !== 0 && areTypedArraysEqual(endTagName, tagName)) {
         throw new Error(
-          `Unmatched end tag at byte offset ${beginPos}, expected "</${tagName}>, found "</${endTagName}>`,
+          `Unmatched end tag at byte offset ${beginPos}, expected "</${decode(tagName)}>, found "</${
+            decode(endTagName)
+          }>`,
         );
       }
 
       if (utf16Offset > nestedEntities.at(-1)!.entityOffset) {
         const entityOffset = nestedEntities.at(-1)!.entityOffset;
         const entityLength = utf16Offset - entityOffset;
-        if (tagName === "i" || tagName === "em") {
+        if (areTypedArraysEqual(tagName, "i") || areTypedArraysEqual(tagName, "em")) {
           entities.push({ type: "italic", offset: entityOffset, length: entityLength });
-        } else if (tagName === "b" || tagName === "strong") {
+        } else if (areTypedArraysEqual(tagName, "b") || areTypedArraysEqual(tagName, "strong")) {
           entities.push({ type: "bold", offset: entityOffset, length: entityLength });
-        } else if (tagName === "s" || tagName === "strike" || tagName === "del") {
+        } else if (
+          areTypedArraysEqual(tagName, "s") || areTypedArraysEqual(tagName, "strike") ||
+          areTypedArraysEqual(tagName, "del")
+        ) {
           entities.push({ type: "strikethrough", offset: entityOffset, length: entityLength });
-        } else if (tagName === "u" || tagName === "ins") {
+        } else if (areTypedArraysEqual(tagName, "u") || areTypedArraysEqual(tagName, "ins")) {
           entities.push({ type: "underline", offset: entityOffset, length: entityLength });
-        } else if (tagName === "tg-spoiler" || (tagName === "span" && nestedEntities.at(-1)!.argument === "spoiler")) {
+        } else if (
+          areTypedArraysEqual(tagName, "tg-spoiler") ||
+          (areTypedArraysEqual(tagName, "span") && areTypedArraysEqual(nestedEntities.at(-1)!.argument, "spoiler"))
+        ) {
           entities.push({ type: "spoiler", offset: entityOffset, length: entityLength });
-        } else if (tagName === "tg-emoji") {
-          const rDocumentId = BigInt(nestedEntities.at(-1)!.argument);
-          if (rDocumentId == 0n) {
+        } else if (areTypedArraysEqual(tagName, "tg-emoji")) {
+          const rDocumentId = BigInt(toInteger(nestedEntities.at(-1)!.argument));
+          if (rDocumentId === 0n) {
             throw new Error("Invalid custom emoji identifier specified");
           }
           entities.push({
@@ -2340,32 +2309,32 @@ export function parseHTML(str_: string) {
             length: entityLength,
             custom_emoji_id: new CustomEmojiId(rDocumentId),
           });
-        } else if (tagName === "a") {
+        } else if (areTypedArraysEqual(tagName, "a")) {
           let url = nestedEntities.at(-1)!.argument;
-          if (url.length == 0) {
-            url = decoder.decode(text.slice(nestedEntities.at(-1)!.entityBeginPos, resultEnd));
+          if (url.length === 0) {
+            url = text.slice(nestedEntities.at(-1)!.entityBeginPos, resultEnd);
           }
           const userId = LinkManager.getLinkUserId(url);
           if (userId.isValid()) {
             entities.push({ type: "text_mention", offset: entityOffset, length: entityLength, user_id: userId });
           } else {
             url = LinkManager.getCheckedLink(url);
-            if (url.length != 0) {
+            if (url.length !== 0) {
               entities.push({ type: "text_link", offset: entityOffset, length: entityLength, url });
             }
           }
-        } else if (tagName === "pre") {
+        } else if (areTypedArraysEqual(tagName, "pre")) {
           const last = entities[entities.length - 1];
           if (
-            entities.length != 0 && last.type === "code" && last.offset == entityOffset &&
-            last.length == entityLength && "language" in last && typeof last.language === "string" &&
-            last.language.length != 0
+            entities.length !== 0 && last.type === "code" && last.offset == entityOffset &&
+            last.length === entityLength && "argument" in last && isUint8Array(last.argument) &&
+            last.argument.length !== 0
           ) {
             entities[entities.length - 1].type = "pre_code";
           } else {
             entities.push({ type: "pre", offset: entityOffset, length: entityLength });
           }
-        } else if (tagName === "code") {
+        } else if (areTypedArraysEqual(tagName, "code")) {
           const last = entities[entities.length - 1];
           if (
             entities.length != 0 && last.type === "pre" && last.offset == entityOffset && last.length == entityLength &&
@@ -2392,7 +2361,7 @@ export function parseHTML(str_: string) {
   }
 
   if (nestedEntities.length != 0) {
-    throw new Error(`Can't find end tag corresponding to start tag ${nestedEntities.at(-1)!.tagName}`);
+    throw new Error(`Can't find end tag corresponding to start tag ${decode(nestedEntities.at(-1)!.tagName)}`);
   }
 
   for (const entity of entities) {
@@ -2403,7 +2372,7 @@ export function parseHTML(str_: string) {
 
   entities = sortEntities(entities);
 
-  const finalString = decoder.decode(text.slice(0, resultEnd));
+  const finalString = text.slice(0, resultEnd);
 
   if (needRecheckUTF8 && !checkUTF8(finalString)) {
     throw new Error(

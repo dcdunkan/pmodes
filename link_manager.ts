@@ -1,46 +1,55 @@
 import { CustomEmojiId } from "./custom_emoji_id.ts";
+import { encode, mergeTypedArrays, toInteger } from "./encode.ts";
 import { HttpUrlProtocol, parseURL } from "./http_url.ts";
 import { UserId } from "./user_id.ts";
-import { CHECK, isAlphaOrDigit } from "./utilities.ts";
+import {
+  areTypedArraysEqual,
+  beginsWith,
+  CHECK,
+  CODEPOINTS,
+  fullSplit,
+  isAlphaOrDigit,
+  split,
+  toLower,
+  tolowerBeginsWith,
+} from "./utilities.ts";
 
 export class LinkManager {
-  static getLinkUserId(url: string): UserId {
-    url = url.toLowerCase();
+  static getLinkUserId(url: Uint8Array): UserId {
+    const lowerCasedUrl = toLower(url);
+    url = lowerCasedUrl;
 
     const linkScheme = "tg:";
-    if (!url.startsWith(linkScheme)) {
+    if (!beginsWith(url, linkScheme)) {
       return new UserId();
     }
 
-    url = url.substring(linkScheme.length);
-    if (url.startsWith("//")) {
-      url = url.substring(2);
+    url = url.slice(linkScheme.length);
+    if (beginsWith(url, "//")) {
+      url = url.slice(2);
     }
 
     const host = "user";
-    if (
-      !url.startsWith(host) ||
-      (url.length > host.length && !["/", "?", "#"].includes(url[host.length]))
-    ) {
+    if (!beginsWith(url, host) || (url.length > host.length && !encode("/?#").includes(url[host.length]))) {
       return new UserId();
     }
 
-    url = url.substring(host.length);
-    if (url.startsWith("/")) {
-      url = url.substring(1);
+    url = url.slice(host.length);
+    if (beginsWith(url, "/")) {
+      url = url.slice(1);
     }
-    if (!url.startsWith("?")) {
+    if (!beginsWith(url, "?")) {
       return new UserId();
     }
-    url = url.substring(1);
-    const hashPos = url.indexOf("#");
-    url = url.substring(0, hashPos == -1 ? undefined : hashPos);
+    url = url.slice(1);
+    const hashPos = url.indexOf(CODEPOINTS["#"]);
+    url = url.slice(0, hashPos == -1 ? undefined : hashPos);
 
-    for (const parameter of url.split("&")) {
-      const [key, value] = parameter.split("=", 2);
-      if (key === "id") {
+    for (const parameter of fullSplit(url, CODEPOINTS["&"])) {
+      const [key, value] = split(parameter, CODEPOINTS["="]);
+      if (areTypedArraysEqual(key, "id")) {
         try {
-          const rUserId = BigInt(value);
+          const rUserId = BigInt(toInteger(value));
           return new UserId(rUserId);
         } catch (_) {
           return new UserId();
@@ -51,37 +60,39 @@ export class LinkManager {
     return new UserId();
   }
 
-  static getLinkCustomEmojiId(url: string) {
-    url = url.toLowerCase();
+  static getLinkCustomEmojiId(url: Uint8Array): CustomEmojiId {
+    const lowerCasedUrl = toLower(url);
+    url = lowerCasedUrl;
 
     const linkScheme = "tg:";
-    if (!url.startsWith(linkScheme)) {
+    if (!beginsWith(url, linkScheme)) {
       throw new Error("Custom emoji URL must have scheme tg");
     }
-    url = url.substring(linkScheme.length);
-    if (url.startsWith("//")) {
-      url = url.substring(2);
+    url = url.slice(linkScheme.length);
+    if (beginsWith(url, "//")) {
+      url = url.slice(2);
     }
 
     const host = "emoji";
-    if (!url.startsWith(host) || (url.length > host.length && !["/", "?", "#"].includes(url[host.length]))) {
+    if (!beginsWith(url, host) || (url.length > host.length && !encode("/?#").includes(url[host.length]))) {
       throw new Error(`Custom emoji URL must have host "${host}"`);
     }
-    url = url.substring(host.length);
-    if (url.startsWith("/")) {
-      url = url.substring(1);
+    url = url.slice(host.length);
+    if (beginsWith(url, "/")) {
+      url = url.slice(1);
     }
-    if (!url.startsWith("?")) {
+    if (!beginsWith(url, "?")) {
       throw new Error("Custom emoji URL must have an emoji identifier");
     }
-    url = url.substring(1);
-    const hashPos = url.indexOf("#");
-    url = url.substring(0, hashPos == -1 ? undefined : hashPos);
+    url = url.slice(1);
+    const hashPos = url.indexOf(CODEPOINTS["#"]);
+    url = url.slice(0, hashPos == -1 ? undefined : hashPos);
 
-    for (const parameter of url.split("&")) {
-      const [key, value] = parameter.split("=", 2);
-      if (key === "id") {
-        const rDocumentId = BigInt(value);
+    const splitx = fullSplit(url, CODEPOINTS["&"]);
+    for (const parameter of splitx) {
+      const [key, value] = split(parameter, CODEPOINTS["="]);
+      if (areTypedArraysEqual(key, "id")) {
+        const rDocumentId = BigInt(toInteger(value));
         return new CustomEmojiId(rDocumentId);
       }
     }
@@ -89,27 +100,26 @@ export class LinkManager {
     throw new Error("Custom emoji URL must have an emoji identifier");
   }
 
-  static getCheckedLink(link: string, httpOnly = false, httpsOnly = false): string {
+  static getCheckedLink(link: Uint8Array, httpOnly = false, httpsOnly = false): Uint8Array {
     try {
       return this.checkLinkImpl(link, httpOnly, httpsOnly);
     } catch (_error) {
-      // console.error(error);
-      return "";
+      return new Uint8Array();
     }
   }
 
-  static checkLinkImpl(link: string, httpOnly = false, httpsOnly = false): string {
+  static checkLinkImpl(link: Uint8Array, httpOnly = false, httpsOnly = false): Uint8Array {
     let isTg = false;
     let isTon = false;
-    if (link.toLowerCase().startsWith("tg:")) {
-      link = link.substring(3);
+    if (tolowerBeginsWith(link, "tg:")) {
+      link = link.slice(3);
       isTg = true;
-    } else if (link.toLowerCase().startsWith("ton:")) {
-      link = link.substring(4);
+    } else if (tolowerBeginsWith(link, "ton:")) {
+      link = link.slice(4);
       isTon = true;
     }
-    if ((isTg || isTon) && link.startsWith("//")) {
-      link = link.substring(2);
+    if ((isTg || isTon) && beginsWith(link, "//")) {
+      link = link.slice(2);
     }
 
     const httpUrl = parseURL(link);
@@ -122,26 +132,27 @@ export class LinkManager {
         throw new Error("Only HTTP links are allowed");
       }
       if (
-        link.toLowerCase().startsWith("http://") || httpUrl.protocol == HttpUrlProtocol.Https ||
+        tolowerBeginsWith(link, "http://") || httpUrl.protocol == HttpUrlProtocol.Https ||
         httpUrl.userinfo.length != 0 || httpUrl.specifiedPort != 0 || httpUrl.isIpv6
       ) {
         throw new Error(`Wrong ${isTg ? "tg" : "ton"} URL`);
       }
 
       let query = httpUrl.query;
-      CHECK(query[0] === "/");
-      if (query.length > 1 && query[1] === "?") {
-        query = query.substring(1);
+      CHECK(query[0] === CODEPOINTS["/"]);
+      if (query.length > 1 && query[1] === CODEPOINTS["?"]) {
+        query = query.slice(1);
       }
       for (const c of httpUrl.host) {
-        if (!isAlphaOrDigit(c) && c !== "-" && c !== "_") {
+        if (!isAlphaOrDigit(c) && c !== CODEPOINTS["-"] && c !== CODEPOINTS["_"]) {
           throw new Error("Unallowed characters in URL host");
         }
       }
-      return (isTg ? "tg" : "ton") + "://" + httpUrl.host + query;
+
+      return mergeTypedArrays(encode(isTg ? "tg" : "ton"), encode("://"), httpUrl.host, query);
     }
 
-    if (httpUrl.host.indexOf(".") == -1 && !httpUrl.isIpv6) {
+    if (httpUrl.host.indexOf(CODEPOINTS["."]) == -1 && !httpUrl.isIpv6) {
       throw new Error("Wrong HTTP URL");
     }
     return httpUrl.getUrl();

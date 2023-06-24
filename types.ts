@@ -29,11 +29,11 @@ export declare namespace MessageEntity {
   }
   export interface PreMessageEntity extends AbstractMessageEntity {
     type: "pre_code";
-    language: string;
+    language: Uint8Array;
   }
   export interface TextLinkMessageEntity extends AbstractMessageEntity {
     type: "text_link";
-    url: string;
+    url: Uint8Array;
   }
   export interface TextMentionMessageEntity extends AbstractMessageEntity {
     type: "text_mention";

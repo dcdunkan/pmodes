@@ -1,11 +1,12 @@
 import { unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
 import { unicodeToLower } from "./unicode.ts";
+import { encode, mergeTypedArrays } from "./encode.ts";
 
-export function isUTF8CharacterFirstCodeUnit(c: number) {
+export function isUTF8CharacterFirstCodeUnit(c: number): boolean {
   return (c & 0xC0) != 0x80;
 }
 
-export function utf8Length(str: Uint8Array) {
+export function utf8Length(str: Uint8Array): number {
   let result = 0;
   for (const c of str) {
     result += isUTF8CharacterFirstCodeUnit(c) ? 1 : 0;
@@ -13,7 +14,15 @@ export function utf8Length(str: Uint8Array) {
   return result;
 }
 
-export function prevUtf8Unsafe(data: Uint8Array, pos: number) {
+export function utf8utf16Length(str: Uint8Array): number {
+  let result = 0;
+  for (const c of str) {
+    result += (isUTF8CharacterFirstCodeUnit(c) ? 1 : 0) + (((c & 0xf8) === 0xf0) ? 1 : 0);
+  }
+  return result;
+}
+
+export function prevUtf8Unsafe(data: Uint8Array, pos: number): number {
   while (!isUTF8CharacterFirstCodeUnit(data[--pos])) {
     // pass
   }
@@ -60,23 +69,43 @@ export function appendUTF8CharacterUnsafe(text: number[] | Uint8Array, pos: numb
   return pos;
 }
 
-export function utf8ToLower(str: Uint8Array) {
-  const result: number[] = [];
+export function appendUtf8Character(str: Uint8Array, code: number) {
+  const toPush: number[] = [];
+  if (code <= 0x7f) {
+    toPush.push(code);
+  } else if (code <= 0x7ff) {
+    toPush.push(0xc0 | (code >> 6)); // implementation-defined
+    toPush.push(0x80 | (code & 0x3f));
+  } else if (code <= 0xffff) {
+    toPush.push(0xe0 | (code >> 12)); // implementation-defined
+    toPush.push(0x80 | ((code >> 6) & 0x3f));
+    toPush.push(0x80 | (code & 0x3f));
+  } else {
+    toPush.push(0xf0 | (code >> 18)); // implementation-defined
+    toPush.push(0x80 | ((code >> 12) & 0x3f));
+    toPush.push(0x80 | ((code >> 6) & 0x3f));
+    toPush.push(0x80 | (code & 0x3f));
+  }
+  return mergeTypedArrays(str, Uint8Array.from(toPush));
+}
+
+export function utf8ToLower(str: Uint8Array): Uint8Array {
+  let result = new Uint8Array();
   let position = 0;
   const end = str.length;
   while (position != end) {
     const { pos, code } = nextUtf8Unsafe(str, position);
     position = pos;
-    appendUTF8CharacterUnsafe(result, result.length, unicodeToLower(code));
+    result = appendUtf8Character(result, unicodeToLower(code));
   }
-  return new Uint8Array(result);
+  return result;
 }
 
-export function utf8Truncate(str: Uint8Array, length: number) {
+export function utf8Truncate(str: Uint8Array, length: number): Uint8Array {
   if (str.length > length) {
     for (let i = 0; i < str.length; i++) {
       if (isUTF8CharacterFirstCodeUnit(str[i])) {
-        if (length === 0) return str.subarray(0, i);
+        if (length === 0) return str.slice(0, i);
         else length--;
       }
     }
@@ -84,16 +113,43 @@ export function utf8Truncate(str: Uint8Array, length: number) {
   return str;
 }
 
-export function utf8Substr(str: Uint8Array, offset: number) {
-  if (offset === 0) return str;
-  const offsetPos = utf8Truncate(str, offset).length;
-  return str.subarray(offsetPos);
+export function utf8utf16Truncate(str: Uint8Array, length: number): Uint8Array {
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (isUTF8CharacterFirstCodeUnit(c)) {
+      if (length <= 0) {
+        return str.slice(0, i);
+      } else {
+        length--;
+        if (c >= 0xf0) {
+          length--;
+        }
+      }
+    }
+  }
+  return str;
 }
 
-export function checkUTF8(str: string) {
-  const data = new TextEncoder().encode(str);
-  let pos = 0;
-  const dataEnd = data.length;
+export function utf8Substr(str: Uint8Array, offset: number): Uint8Array {
+  if (offset === 0) return str;
+  const offsetPos = utf8Truncate(str, offset).length;
+  return str.slice(offsetPos);
+}
+
+export function utf8utf16Substr(str: Uint8Array, offset: number): Uint8Array;
+export function utf8utf16Substr(str: Uint8Array, offset: number, length: number): Uint8Array;
+export function utf8utf16Substr(str: Uint8Array, offset: number, length?: number): Uint8Array {
+  if (length != null) {
+    return utf8utf16Truncate(utf8utf16Substr(str, offset), length);
+  }
+  if (offset === 0) return str;
+  const offsetPos = utf8utf16Truncate(str, offset).length;
+  return str.slice(offsetPos);
+}
+
+export function checkUTF8(str: Uint8Array) {
+  let data = 0;
+  const dataEnd = str.length;
 
   function ENSURE(condition: boolean) {
     if (!condition) {
@@ -102,36 +158,36 @@ export function checkUTF8(str: string) {
   }
 
   do {
-    const a = data[pos++];
-    if ((a & 0x80) == 0) {
-      if (pos == dataEnd + 1) {
+    const a = str[data++];
+    if ((a & 0x80) === 0) {
+      if (data === dataEnd + 1) {
         return true;
       }
       continue;
     }
 
-    if (ENSURE((a & 0x40) != 0) == false) return false;
+    if (ENSURE((a & 0x40) !== 0) === false) return false;
 
-    const b = data[pos++];
-    if (ENSURE((b & 0xc0) == 0x80) == false) return false;
-    if ((a & 0x20) == 0) {
-      if (ENSURE((a & 0x1e) > 0) == false) return false;
+    const b = str[data++];
+    if (ENSURE((b & 0xc0) === 0x80) === false) return false;
+    if ((a & 0x20) === 0) {
+      if (ENSURE((a & 0x1e) > 0) === false) return false;
       continue;
     }
 
-    const c = data[pos++];
-    if (ENSURE((c & 0xc0) == 0x80) == false) return false;
-    if ((a & 0x10) == 0) {
+    const c = str[data++];
+    if (ENSURE((c & 0xc0) === 0x80) === false) return false;
+    if ((a & 0x10) === 0) {
       const x = ((a & 0x0f) << 6) | (b & 0x20);
-      if (ENSURE(x != 0 && x != 0x360) == false) return false; // surrogates
+      if (ENSURE(x !== 0 && x !== 0x360) === false) return false; // surrogates
       continue;
     }
 
-    const d = data[pos++];
-    if (ENSURE((d & 0xc0) == 0x80) == false) return false;
-    if ((a & 0x08) == 0) {
+    const d = str[data++];
+    if (ENSURE((d & 0xc0) === 0x80) === false) return false;
+    if ((a & 0x08) === 0) {
       const t = ((a & 0x07) << 6) | (b & 0x30);
-      if (ENSURE(0 < t && t < 0x110) == false) return false; // end of unicode
+      if (ENSURE(0 < t && t < 0x110) === false) return false; // end of unicode
       continue;
     }
 

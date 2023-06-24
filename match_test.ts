@@ -1,5 +1,6 @@
 import { CustomEmojiId } from "./custom_emoji_id.ts";
 import { assert, assertEquals, assertStrictEquals } from "./deps_test.ts";
+import { decode, encode } from "./encode.ts";
 import {
   findBankCardNumbers,
   findBotCommands,
@@ -16,13 +17,12 @@ import {
 import { MessageEntity } from "./types.ts";
 import { UserId } from "./user_id.ts";
 
-const encoder = new TextEncoder(), decoder = new TextDecoder();
-const encode = (str: string) => encoder.encode(str);
-const decode = (data: Uint8Array) => decoder.decode(data);
-
-function checkFn(fn: (text: string) => [number, number][]) {
+function checkFn(fn: (text: Uint8Array) => [number, number][]) {
   return (text: string, expected: string[]) => {
-    assertEquals(fn(text).map(([s, e]) => decode(encode(text).subarray(s, e))), expected);
+    const encoded = encode(text);
+    const result = fn(encoded);
+    const actual = result.map(([s, e]) => decode(encoded.slice(s, e)));
+    assertEquals(actual, expected);
   };
 }
 
@@ -169,10 +169,10 @@ Deno.test("cashtags", () => {
 
 Deno.test("media timestamps", () => {
   const check = (text: string, expected: [string, number][]) => {
-    assertEquals(
-      findMediaTimestamps(text).map(([[s, e], t]) => [decode(encode(text).subarray(s, e)), t]),
-      expected,
-    );
+    const encoded = encode(text);
+    const result = findMediaTimestamps(encoded);
+    const actual = result.map(([[s, e], t]) => [decode(encoded.slice(s, e)), t]);
+    assertEquals(actual, expected);
   };
 
   check("", []);
@@ -314,7 +314,9 @@ Deno.test("tg urls", () => {
 
 Deno.test("email address", () => {
   const check = (text: string, expected: boolean) => {
-    return assertEquals(isEmailAddress(encode(text)), expected);
+    const result = encode(text);
+    const actual = isEmailAddress(result);
+    return assertEquals(actual, expected);
   };
 
   check("telegram.org", false);
@@ -442,15 +444,16 @@ Deno.test("url", () => {
     expectedUrls: string[],
     expectedEmailAddresses: string[] = [],
   ) => {
-    const results = findURLs(str);
-    const resultUrls: string[] = [];
-    const resultEmailAddress: string[] = [];
+    const encoded = encode(str);
+    const results = findURLs(encoded);
+    const actualUrls: string[] = [];
+    const actualEmailAddress: string[] = [];
     for (const [[start, end], email] of results) {
-      if (!email) resultUrls.push(decode(encode(str).subarray(start, end)));
-      else resultEmailAddress.push(decode(encode(str).subarray(start, end)));
+      if (!email) actualUrls.push(decode(encoded.slice(start, end)));
+      else actualEmailAddress.push(decode(encoded.slice(start, end)));
     }
-    assertEquals(resultUrls, expectedUrls);
-    assertEquals(resultEmailAddress, expectedEmailAddresses);
+    assertEquals(actualUrls, expectedUrls);
+    assertEquals(actualEmailAddress, expectedEmailAddresses);
   };
 
   check("telegram.org", ["telegram.org"]);
@@ -730,35 +733,34 @@ Deno.test("url", () => {
 });
 
 Deno.test("parse markdown v2", () => {
-  // if the third one isn't passed, then it is considered as a error.
   const check = (text: string, result: string, entities?: MessageEntity[]) => {
+    const str = encode(text);
     if (entities == null) {
       try {
-        parseMarkdownV2(text);
+        parseMarkdownV2(str);
       } catch (err) {
         assert(err instanceof Error);
         assertStrictEquals(result, err.message);
       }
     } else {
-      const parsed = parseMarkdownV2(text);
-      assertStrictEquals(result, parsed.text);
+      const parsed = parseMarkdownV2(str);
+      assertStrictEquals(result, decode(parsed.text));
       assertEquals(entities, parsed.entities);
     }
   };
 
-  const reservedCharacters = ["]", "(", ")", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"];
-  const beginCharacters = ["_", "*", "[", "~", "`"];
+  const reservedCharacters = encode("]()>#+-=|{}.!");
+  const beginCharacters = encode("_*[~`");
 
   for (let codepoint = 1; codepoint < 126; codepoint++) {
-    const char = String.fromCodePoint(codepoint);
-    if (beginCharacters.includes(char)) {
+    if (beginCharacters.includes(codepoint)) {
       continue;
     }
-    const text = char;
-    if (!reservedCharacters.includes(char)) {
+    const text = decode(Uint8Array.of(codepoint));
+    if (!reservedCharacters.includes(codepoint)) {
       check(text, text, []);
     } else {
-      check(text, `Character '${char}' is reserved and must be escaped with the preceding '\\'`);
+      check(text, `Character '${text}' is reserved and must be escaped with the preceding '\\'`);
       const escapedText = "\\" + text;
       check(escapedText, text, []);
     }
@@ -826,14 +828,14 @@ Deno.test("parse markdown v2", () => {
     length: 2,
   }]);
   check("🏟 🏟`🏟 🏟```", "🏟 🏟🏟 🏟", [{ type: "code", offset: 5, length: 5 }]);
-  check("🏟 🏟```🏟 🏟```", "🏟 🏟 🏟", [{ type: "pre_code", offset: 5, length: 3, language: "🏟" }]);
-  check("🏟 🏟```🏟\n🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: "🏟" }]);
-  check("🏟 🏟```🏟\r🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: "🏟" }]);
-  check("🏟 🏟```🏟\n\r🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: "🏟" }]);
-  check("🏟 🏟```🏟\r\n🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: "🏟" }]);
-  check("🏟 🏟```🏟\n\n🏟```", "🏟 🏟\n🏟", [{ type: "pre_code", offset: 5, length: 3, language: "🏟" }]);
-  check("🏟 🏟```🏟\r\r🏟```", "🏟 🏟\r🏟", [{ type: "pre_code", offset: 5, length: 3, language: "🏟" }]);
-  check("🏟 🏟```🏟 \\\\\\`🏟```", "🏟 🏟 \\`🏟", [{ type: "pre_code", offset: 5, length: 5, language: "🏟" }]);
+  check("🏟 🏟```🏟 🏟```", "🏟 🏟 🏟", [{ type: "pre_code", offset: 5, length: 3, language: encode("🏟") }]);
+  check("🏟 🏟```🏟\n🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: encode("🏟") }]);
+  check("🏟 🏟```🏟\r🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: encode("🏟") }]);
+  check("🏟 🏟```🏟\n\r🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: encode("🏟") }]);
+  check("🏟 🏟```🏟\r\n🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: encode("🏟") }]);
+  check("🏟 🏟```🏟\n\n🏟```", "🏟 🏟\n🏟", [{ type: "pre_code", offset: 5, length: 3, language: encode("🏟") }]);
+  check("🏟 🏟```🏟\r\r🏟```", "🏟 🏟\r🏟", [{ type: "pre_code", offset: 5, length: 3, language: encode("🏟") }]);
+  check("🏟 🏟```🏟 \\\\\\`🏟```", "🏟 🏟 \\`🏟", [{ type: "pre_code", offset: 5, length: 5, language: encode("🏟") }]);
   check("🏟 🏟**", "🏟 🏟", []);
   check("||test||", "test", [{ type: "spoiler", offset: 0, length: 4 }]);
   check("🏟 🏟``", "🏟 🏟", []);
@@ -851,37 +853,37 @@ Deno.test("parse markdown v2", () => {
     { type: "code", offset: 2, length: 1 },
   ]);
   check("[](telegram.org)", "", []);
-  check("[ ](telegram.org)", " ", [{ type: "text_link", offset: 0, length: 1, url: "http://telegram.org/" }]);
+  check("[ ](telegram.org)", " ", [{ type: "text_link", offset: 0, length: 1, url: encode("http://telegram.org/") }]);
   check("[ ](as)", " ", []);
   check("[telegram\\.org]", "telegram.org", [{
     type: "text_link",
     offset: 0,
     length: 12,
-    url: "http://telegram.org/",
+    url: encode("http://telegram.org/"),
   }]);
   check("[telegram\\.org]a", "telegram.orga", [{
     type: "text_link",
     offset: 0,
     length: 12,
-    url: "http://telegram.org/",
+    url: encode("http://telegram.org/"),
   }]);
   check("[telegram\\.org](telegram.dog)", "telegram.org", [{
     type: "text_link",
     offset: 0,
     length: 12,
-    url: "http://telegram.dog/",
+    url: encode("http://telegram.dog/"),
   }]);
   check("[telegram\\.org](https://telegram.dog?)", "telegram.org", [{
     type: "text_link",
     offset: 0,
     length: 12,
-    url: "https://telegram.dog/?",
+    url: encode("https://telegram.dog/?"),
   }]);
   check("[telegram\\.org](https://telegram.dog?\\\\\\()", "telegram.org", [{
     type: "text_link",
     offset: 0,
     length: 12,
-    url: "https://telegram.dog/?\\(",
+    url: encode("https://telegram.dog/?\\("),
   }]);
   check("[telegram\\.org]()", "telegram.org", []);
   check("[telegram\\.org](asdasd)", "telegram.org", []);
@@ -901,26 +903,29 @@ Deno.test("parse markdown v2", () => {
 
 Deno.test("parse html", () => {
   const check = (text: string, result: string, entities?: MessageEntity[]) => {
+    console.log(text);
+    const str = encode(text);
     if (entities == null) {
       try {
-        console.log(parseHTML(text));
+        parseHTML(str);
       } catch (err) {
         assert(err instanceof Error);
+        console.log(err.message);
         assertStrictEquals(result, err.message);
       }
     } else {
-      const parsed = parseHTML(text);
-      assertStrictEquals(result, parsed.text);
+      const parsed = parseHTML(str);
+      assertStrictEquals(result, decode(parsed.text));
       assertEquals(entities, parsed.entities);
     }
   };
 
-  const invalidSurrogatePairErrorMessage =
+  const INVALID_SURROGATE_PAIR_ERROR_MESSAGE =
     "Text contains invalid Unicode characters after decoding HTML entities, check for unmatched surrogate code units";
 
-  check("&#57311;", invalidSurrogatePairErrorMessage);
-  check("&#xDFDF;", invalidSurrogatePairErrorMessage);
-  check("&#xDFDF", invalidSurrogatePairErrorMessage);
+  check("&#57311;", INVALID_SURROGATE_PAIR_ERROR_MESSAGE);
+  check("&#xDFDF;", INVALID_SURROGATE_PAIR_ERROR_MESSAGE);
+  check("&#xDFDF", INVALID_SURROGATE_PAIR_ERROR_MESSAGE);
   check("🏟 🏟&lt;<abacaba", "Unclosed start tag at byte offset 13");
   check("🏟 🏟&lt;<abac aba>", 'Unsupported start tag "abac" at byte offset 13');
   check("🏟 🏟&lt;<abac>", 'Unsupported start tag "abac" at byte offset 13');
@@ -994,19 +999,19 @@ Deno.test("parse html", () => {
     type: "text_link",
     offset: 0,
     length: 1,
-    url: "http://telegram.org/",
+    url: encode("http://telegram.org/"),
   }]);
   check("<a href=telegram.org>\r</a>", "\r", [{
     type: "text_link",
     offset: 0,
     length: 1,
-    url: "http://telegram.org/",
+    url: encode("http://telegram.org/"),
   }]);
   check("<a href=telegram.org>\n</a>", "\n", [{
     type: "text_link",
     offset: 0,
     length: 1,
-    url: "http://telegram.org/",
+    url: encode("http://telegram.org/"),
   }]);
   check("<code><i><b> </b></i></code><i><b><code> </code></b></i>", "  ", [
     { type: "code", offset: 0, length: 1 },
@@ -1021,24 +1026,24 @@ Deno.test("parse html", () => {
     { type: "bold", offset: 0, length: 1 },
     { type: "code", offset: 2, length: 1 },
   ]);
-  check("<a href=telegram.org> </a>", " ", [{ type: "text_link", offset: 0, length: 1, url: "http://telegram.org/" }]);
+  check("<a href=telegram.org> </a>", " ", [{ type: "text_link", offset: 0, length: 1, url: encode("http://telegram.org/") }]);
   check('<a href  ="telegram.org"   > </a>', " ", [{
     type: "text_link",
     offset: 0,
     length: 1,
-    url: "http://telegram.org/",
+    url: encode("http://telegram.org/"),
   }]);
   check("<a   href=  'telegram.org'   > </a>", " ", [{
     type: "text_link",
     offset: 0,
     length: 1,
-    url: "http://telegram.org/",
+    url: encode("http://telegram.org/"),
   }]);
   check("<a   href=  'telegram.org?&lt;'   > </a>", " ", [{
     type: "text_link",
     offset: 0,
     length: 1,
-    url: "http://telegram.org/?<",
+    url: encode("http://telegram.org/?<"),
   }]);
   check("<a> </a>", " ", []);
   check("<a>telegram.org </a>", "telegram.org ", []);
@@ -1046,10 +1051,10 @@ Deno.test("parse html", () => {
     type: "text_link",
     offset: 0,
     length: 12,
-    url: "http://telegram.org/",
+    url: encode("http://telegram.org/"),
   }]);
   check("<a>https://telegram.org/asdsa?asdasdwe#12e3we</a>", "https://telegram.org/asdsa?asdasdwe#12e3we", [
-    { type: "text_link", offset: 0, length: 42, url: "https://telegram.org/asdsa?asdasdwe#12e3we" },
+    { type: "text_link", offset: 0, length: 42, url: encode("https://telegram.org/asdsa?asdasdwe#12e3we") },
   ]);
   check("🏟 🏟&lt;<pre  >🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [{ type: "pre", offset: 6, length: 6 }]);
   check("🏟 🏟&lt;<code >🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [{ type: "code", offset: 6, length: 6 }]);
@@ -1062,10 +1067,10 @@ Deno.test("parse html", () => {
     { type: "code", offset: 6, length: 6 },
   ]);
   check('🏟 🏟&lt;<pre><code class="language-fift">🏟 🏟&lt;</></>', "🏟 🏟<🏟 🏟<", [
-    { type: "pre_code", offset: 6, length: 6, language: "fift" },
+    { type: "pre_code", offset: 6, length: 6, language: encode("fift") },
   ]);
   check('🏟 🏟&lt;<code class="language-fift"><pre>🏟 🏟&lt;</></>', "🏟 🏟<🏟 🏟<", [
-    { type: "pre_code", offset: 6, length: 6, language: "fift" },
+    { type: "pre_code", offset: 6, length: 6, language: encode("fift") },
   ]);
   check('🏟 🏟&lt;<pre><code class="language-fift">🏟 🏟&lt;</> </>', "🏟 🏟<🏟 🏟< ", [
     { type: "pre", offset: 6, length: 7 },
