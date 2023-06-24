@@ -1,15 +1,14 @@
 import { type MessageEntity, MessageEntityType } from "./types.ts";
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 
+// deno-fmt-ignore
 export const CODEPOINTS = {
-  "@": 64,
-  "/": 47,
-  "#": 35,
-  "_": 95,
-  "$": 36,
-  ":": 58,
-  "A": 65,
-  "Z": 90,
+  "\t": 9, "\r": 13, "\0": 0, "\v": 11, "\n": 10, "<": 60, ">": 62, '"': 34,
+  " ": 32, "@": 64, "/": 47, "#": 35, ".": 46, ",": 44, "+": 43, "-": 45, "_": 95,
+  "$": 36, ":": 58, "0": 48, "9": 57, "A": 65, "Z": 90, "a": 97, "g": 103, "o": 111,
+  "n": 110, "t": 116, "z": 122, "?": 63, "[": 91, "]": 93, "{": 123, "}": 125,
+  "(": 40, ")": 41, "`": 96, "'": 39, "~": 126, "T": 84, "2": 50, "3": 51, "5": 53,
+  "6": 54,
 };
 
 export function CHECK(condition: boolean) {
@@ -35,29 +34,97 @@ export function isWordCharacter(code: number) {
   }
 }
 
-export function isSpace(c: string) {
-  return c === " " || c === "\t" || c === "\r" || c === "\n" || c === "\0" ||
-    c === "\v";
+export function toLower(codepoint: number): number;
+export function toLower(data: Uint8Array): Uint8Array;
+export function toLower(c: number | Uint8Array): Uint8Array | number {
+  return typeof c === "number"
+    ? (CODEPOINTS["A"] <= c && c <= CODEPOINTS["Z"]) ? c - CODEPOINTS["A"] + CODEPOINTS["a"] : c
+    : new Uint8Array(c.map((code) => toLower(code)));
 }
 
-export function isAlpha(c: string) {
-  return ("A" <= c && c <= "Z") || ("a" <= c && c <= "z");
+export function split(s: Uint8Array, delimiter: number = CODEPOINTS[" "]): Uint8Array[] {
+  const delimiterPos = s.indexOf(delimiter);
+  if (delimiterPos == -1) {
+    return [s];
+  } else {
+    return [s.subarray(0, delimiterPos), s.subarray(delimiterPos + 1)];
+  }
 }
 
-export function isDigit(c: string) {
-  return "0" <= c && c <= "9";
+export function fullSplit(
+  s: Uint8Array,
+  delimiter = CODEPOINTS[" "],
+  maxParts = Number.MAX_SAFE_INTEGER,
+): Uint8Array[] {
+  const result: Uint8Array[] = [];
+  if (s.length === 0) {
+    return result;
+  }
+  while (result.length + 1 < maxParts) {
+    const delimiterPos = s.indexOf(delimiter);
+    if (delimiterPos === -1) break;
+    result.push(s.subarray(0, delimiterPos));
+    s = s.subarray(delimiterPos + 1);
+  }
+  result.push(s);
+  return result;
 }
 
-export function isAlphaOrDigit(c: string) {
-  return isAlpha(c) || isDigit(c);
+export function areTypedArraysEqual(a: Uint8Array, b: Uint8Array) {
+  return a.byteLength === b.byteLength && !a.some((val, i) => val !== b[i]);
 }
 
-export function isAlphaDigitOrUnderscore(c: string) {
-  return isAlphaOrDigit(c) || c === "_";
+export function beginsWith(str: Uint8Array, prefix: Uint8Array) {
+  return prefix.length <= str.length &&
+    areTypedArraysEqual(str.subarray(0, prefix.length), prefix);
 }
 
-export function isAlphaDigitUnderscoreOrMinus(c: string) {
-  return isAlphaOrDigit(c) || c === "_" || c === "-";
+export function endsWith(str: Uint8Array, suffix: Uint8Array) {
+  return suffix.length <= str.length &&
+    areTypedArraysEqual(str.subarray(str.length - suffix.length), suffix);
+}
+
+export function isSpace(char: string): boolean;
+export function isSpace(codepoint: number): boolean;
+export function isSpace(c: string | number): boolean {
+  return typeof c === "string"
+    ? (c === " " || c === "\t" || c === "\r" || c === "\n" || c === "\0" || c === "\v")
+    : (c == CODEPOINTS[" "] || c == CODEPOINTS["\t"] || c == CODEPOINTS["\r"] || c == CODEPOINTS["\n"] ||
+      c == CODEPOINTS["\0"] || c == CODEPOINTS["\v"]);
+}
+
+export function isAlpha(char: string): boolean;
+export function isAlpha(codepoint: number): boolean;
+export function isAlpha(c: string | number): boolean {
+  return typeof c === "string"
+    ? ("A" <= c && c <= "Z") || ("a" <= c && c <= "z")
+    : (CODEPOINTS["A"] <= c && c <= CODEPOINTS["Z"]) || (CODEPOINTS["a"] <= c && c <= CODEPOINTS["z"]);
+}
+
+export function isDigit(char: string): boolean;
+export function isDigit(codepoint: number): boolean;
+export function isDigit(c: string | number): boolean {
+  return typeof c === "string" ? ("0" <= c && c <= "9") : (CODEPOINTS["0"] <= c && c <= CODEPOINTS["9"]);
+}
+
+export function isAlphaOrDigit(char: string): boolean;
+export function isAlphaOrDigit(codepoint: number): boolean;
+export function isAlphaOrDigit(c: string | number): boolean {
+  return typeof c === "string" ? isAlpha(c) || isDigit(c) : isAlpha(c) || isDigit(c);
+}
+
+export function isAlphaDigitOrUnderscore(char: string): boolean;
+export function isAlphaDigitOrUnderscore(codepoint: number): boolean;
+export function isAlphaDigitOrUnderscore(c: string | number): boolean {
+  return typeof c === "string" ? isAlphaOrDigit(c) || c === "_" : isAlphaOrDigit(c) || c == CODEPOINTS["_"];
+}
+
+export function isAlphaDigitUnderscoreOrMinus(char: string): boolean;
+export function isAlphaDigitUnderscoreOrMinus(codepoint: number): boolean;
+export function isAlphaDigitUnderscoreOrMinus(c: string | number): boolean {
+  return typeof c === "string"
+    ? isAlphaOrDigit(c) || c === "_" || c === "-"
+    : isAlphaOrDigit(c) || c == CODEPOINTS["_"] || c == CODEPOINTS["-"];
 }
 
 export function isHexDigit(c: string) {

@@ -3,11 +3,15 @@ import { LinkManager } from "./link_manager.ts";
 import { MessageEntity, MessageEntityType } from "./types.ts";
 import { UserId } from "./user_id.ts";
 import {
+  areTypedArraysEqual,
+  beginsWith,
   CHECK,
   CODEPOINTS,
   convertEntityTypeEnumToString,
   convertEntityTypeEnumToStyledString,
   convertEntityTypeStringToEnum,
+  endsWith,
+  fullSplit,
   hexToInt,
   isAlpha,
   isAlphaDigitOrUnderscore,
@@ -19,6 +23,8 @@ import {
   isSpace,
   isWordCharacter,
   LOG_CHECK,
+  split,
+  toLower,
 } from "./utilities.ts";
 import {
   appendUTF8CharacterUnsafe,
@@ -26,6 +32,9 @@ import {
   isUTF8CharacterFirstCodeUnit,
   nextUtf8Unsafe,
   prevUtf8Unsafe,
+  utf8Length,
+  utf8Substr,
+  utf8ToLower,
 } from "./utf8.ts";
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 import { equal, unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
@@ -51,7 +60,7 @@ export function matchMentions(text: string): Position[] {
   let position = begin;
 
   while (true) {
-    const atSymbol = str.slice(position).indexOf(CODEPOINTS["@"]);
+    const atSymbol = str.subarray(position).indexOf(CODEPOINTS["@"]);
     if (atSymbol == -1) break;
     position += atSymbol;
 
@@ -94,7 +103,7 @@ export function matchBotCommands(text: string): Position[] {
   let position = begin;
 
   while (true) {
-    const slashSymbol = str.slice(position).indexOf(CODEPOINTS["/"]);
+    const slashSymbol = str.subarray(position).indexOf(CODEPOINTS["/"]);
     if (slashSymbol == -1) break;
     position += slashSymbol;
 
@@ -155,7 +164,7 @@ export function matchHashtags(text: string): Position[] {
   let category: UnicodeSimpleCategory = 0;
 
   while (true) {
-    const hashSymbol = str.slice(position).indexOf(CODEPOINTS["#"]);
+    const hashSymbol = str.subarray(position).indexOf(CODEPOINTS["#"]);
     if (hashSymbol == -1) break;
     position += hashSymbol;
 
@@ -203,7 +212,7 @@ export function matchCashtags(text: string): Position[] {
   let position = begin;
 
   while (true) {
-    const dollarSymbol = str.slice(position).indexOf(CODEPOINTS["$"]);
+    const dollarSymbol = str.subarray(position).indexOf(CODEPOINTS["$"]);
     if (dollarSymbol == -1) break;
     position += dollarSymbol;
 
@@ -218,10 +227,10 @@ export function matchCashtags(text: string): Position[] {
     }
 
     const cashtagBegin = ++position;
-    if ((end - position) >= 5 && decode(str.slice(position, position + 5)) === "1INCH") {
+    if ((end - position) >= 5 && decode(str.subarray(position, position + 5)) === "1INCH") {
       position += 5;
     } else {
-      while ((position != end) && CODEPOINTS["Z"] >= str[position] && str[position] >= CODEPOINTS["A"]) {
+      while (position != end && CODEPOINTS["Z"] >= str[position] && str[position] >= CODEPOINTS["A"]) {
         position++;
       }
     }
@@ -250,30 +259,27 @@ export function matchMediaTimestamps(text: string) {
   let position = begin;
 
   while (true) {
-    const colonSign = str.slice(position).indexOf(CODEPOINTS[":"]);
+    const colonSign = str.subarray(position).indexOf(CODEPOINTS[":"]);
     if (colonSign == -1) break;
     position += colonSign;
 
     let mediaTimestampBegin = position;
     while (
       mediaTimestampBegin != begin &&
-      (str[mediaTimestampBegin - 1] == CODEPOINTS[":"] || isDigit(decode(str[mediaTimestampBegin - 1])))
+      (str[mediaTimestampBegin - 1] == CODEPOINTS[":"] || isDigit(str[mediaTimestampBegin - 1]))
     ) {
       mediaTimestampBegin--;
     }
     let mediaTimestampEnd = position;
     while (
       mediaTimestampEnd + 1 != end &&
-      (str[mediaTimestampEnd + 1] == CODEPOINTS[":"] || isDigit(decode(str[mediaTimestampEnd + 1])))
+      (str[mediaTimestampEnd + 1] == CODEPOINTS[":"] || isDigit(str[mediaTimestampEnd + 1]))
     ) {
       mediaTimestampEnd++;
     }
     mediaTimestampEnd++;
 
-    if (
-      mediaTimestampEnd != position && mediaTimestampEnd != (position + 1) &&
-      isDigit(decode(str[position + 1]))
-    ) {
+    if (mediaTimestampEnd != position && mediaTimestampEnd != (position + 1) && isDigit(str[position + 1])) {
       position = mediaTimestampEnd;
 
       if (mediaTimestampBegin != begin) {
@@ -300,56 +306,68 @@ export function matchMediaTimestamps(text: string) {
   return result;
 }
 
-export function matchBankCardNumbers(str: string) {
+export function matchBankCardNumbers(text: string) {
+  const str = encode(text);
   const result: Position[] = [];
   const begin = 0, end = str.length;
-  let pos = begin;
+  let position = begin;
 
-  while (pos < end) {
-    while (pos != end && !isDigit(str[pos])) pos++;
-    if (pos == end) break;
-    if (pos != begin) {
-      const prev = str[pos - 1];
+  while (true) {
+    while (position != end && !isDigit(str[position])) {
+      position++;
+    }
+    if (position == end) {
+      break;
+    }
+    if (position != begin) {
+      const prevPosition = prevUtf8Unsafe(str, position);
+      const { code: prev } = nextUtf8Unsafe(str, prevPosition);
+
       if (
-        prev === "." || prev === "," || prev === "+" ||
-        prev === "-" || prev === "_" ||
-        getUnicodeSimpleCategory(prev.codePointAt(0)!) ===
-          UnicodeSimpleCategory.Letter
+        prev == CODEPOINTS["."] || prev == CODEPOINTS[","] || prev == CODEPOINTS["+"] ||
+        prev == CODEPOINTS["-"] || prev == CODEPOINTS["_"] ||
+        getUnicodeSimpleCategory(prev) == UnicodeSimpleCategory.Letter
       ) {
         while (
-          pos != end &&
-          (isDigit(str[pos]) || str[pos] === " " || str[pos] === "-")
+          position != end &&
+          (isDigit(str[position]) || str[position] == CODEPOINTS[" "] || str[position] == CODEPOINTS["-"])
         ) {
-          pos++;
+          position++;
         }
         continue;
       }
     }
 
-    const cardNumberBegin = pos;
+    const cardNumberBegin = position;
     let digitCount = 0;
     while (
-      pos != end && (isDigit(str[pos]) || str[pos] === " " || str[pos] === "-")
+      position != end &&
+      (isDigit(str[position]) || str[position] == CODEPOINTS[" "] || str[position] == CODEPOINTS["-"])
     ) {
       if (
-        str[pos] === " " && digitCount >= 16 && digitCount <= 19 &&
-        digitCount === (pos - cardNumberBegin)
+        str[position] == CODEPOINTS[" "] && digitCount >= 16 && digitCount <= 19 &&
+        digitCount == (position - cardNumberBegin)
       ) break;
-      digitCount += isDigit(str[pos]) ? 1 : 0;
-      pos++;
+      digitCount += isDigit(str[position]) ? 1 : 0;
+      position++;
     }
-    if (digitCount < 13 || digitCount > 19) continue;
+    if (digitCount < 13 || digitCount > 19) {
+      continue;
+    }
 
-    let cardNumberEnd = pos;
-    while (!isDigit(str[cardNumberEnd - 1])) cardNumberEnd--;
+    let cardNumberEnd = position;
+    while (!isDigit(str[cardNumberEnd - 1])) {
+      cardNumberEnd--;
+    }
     const cardNumberSize = cardNumberEnd - cardNumberBegin;
-    if (cardNumberSize > 2 * digitCount - 1) continue;
+    if (cardNumberSize > 2 * digitCount - 1) {
+      continue;
+    }
     if (cardNumberEnd != end) {
-      const next = str[cardNumberEnd];
+      const { code: next } = nextUtf8Unsafe(str, cardNumberEnd);
       if (
-        next === "-" || next === "_" ||
-        getUnicodeSimpleCategory(next.codePointAt(0)!) ===
-          UnicodeSimpleCategory.Letter
+        next == CODEPOINTS["-"] || next == CODEPOINTS["_"] ||
+        getUnicodeSimpleCategory(next) == UnicodeSimpleCategory.Letter
       ) continue;
     }
 
@@ -368,78 +386,82 @@ export function isURLUnicodeSymbol(c: number) {
 
 export function isURLPathSymbol(c: number) {
   switch (c) {
-    case "\n".codePointAt(0)!:
-    case "<".codePointAt(0)!:
-    case ">".codePointAt(0)!:
-    case '"'.codePointAt(0)!:
-    case 0xab:
-    case 0xbb:
+    case CODEPOINTS["\n"]:
+    case CODEPOINTS["<"]:
+    case CODEPOINTS[">"]:
+    case CODEPOINTS['"']:
+    case 0xab: // «
+    case 0xbb: // »
       return false;
     default:
       return isURLUnicodeSymbol(c);
   }
 }
 
-export function matchTgURLs(str: string) {
+export function matchTgURLs(text: string) {
+  const str = encode(text);
   const result: Position[] = [];
   const begin = 0, end = str.length;
-  let pos = begin;
-  const badPathEndChars = [".", ":", ";", ",", "(", "'", "?", "!", "`"];
+  let position = begin;
 
-  while (end - pos > 5) {
-    const colonSymbol = str.substring(pos).indexOf(":");
+  const badPathEndChars = encode(".:;,('?!`");
+
+  while (end - position > 5) {
+    const colonSymbol = str.subarray(position).indexOf(CODEPOINTS[":"]);
     if (colonSymbol == -1) break;
-    pos += colonSymbol;
+    position += colonSymbol;
 
-    let urlBegin: number | undefined;
-    if (end - pos >= 3 && str[pos + 1] === "/" && str[pos + 2] === "/") {
+    let urlBegin: number | undefined = undefined;
+    if (end - position >= 3 && str[position + 1] == CODEPOINTS["/"] && str[position + 2] == CODEPOINTS["/"]) {
       if (
-        pos - begin >= 2 && str[pos - 2].toLowerCase() === "t" &&
-        str[pos - 1].toLowerCase() === "g"
+        position - begin >= 2 && toLower(str[position - 2]) == CODEPOINTS["t"] &&
+        toLower(str[position - 1]) == CODEPOINTS["g"]
       ) {
-        urlBegin = pos - 2;
+        urlBegin = position - 2;
       } else if (
-        pos - begin >= 3 && str[pos - 3].toLowerCase() === "t" &&
-          str[pos - 2].toLowerCase() === "o" ||
-        str[pos - 1].toLowerCase() === "n"
+        position - begin >= 3 && toLower(str[position - 3]) === CODEPOINTS["t"] &&
+          toLower(str[position - 2]) === CODEPOINTS["o"] ||
+        toLower(str[position - 1]) === CODEPOINTS["n"]
       ) {
-        urlBegin = pos - 3;
+        urlBegin = position - 3;
       }
     }
     if (urlBegin == null) {
-      ++pos;
+      ++position;
       continue;
     }
 
-    pos += 3;
-    const domainBegin = pos;
-    while (
-      pos != end && pos - domainBegin != 253 &&
-      isAlphaDigitUnderscoreOrMinus(str[pos])
-    ) {
-      pos++;
+    position += 3;
+    const domainBegin = position;
+    while (position != end && position - domainBegin != 253 && isAlphaDigitUnderscoreOrMinus(str[position])) {
+      position++;
     }
-    if (pos == domainBegin) continue;
+    if (position == domainBegin) {
+      continue;
+    }
 
     if (
-      pos != end && (str[pos] === "/" || str[pos] === "?" || str[pos] === "#")
+      position != end &&
+      (str[position] == CODEPOINTS["/"] || str[position] == CODEPOINTS["?"] || str[position] == CODEPOINTS["#"])
     ) {
-      let pathEndPos = pos + 1;
+      let pathEndPos = position + 1;
       while (pathEndPos != end) {
-        const next = str.codePointAt(pathEndPos)!;
-        if (!isURLPathSymbol(next)) break;
-        pathEndPos++;
+        const { code, pos: nextPosition } = nextUtf8Unsafe(str, pathEndPos);
+        if (!isURLPathSymbol(code)) {
+          break;
+        }
+        pathEndPos = nextPosition;
       }
       while (
-        pathEndPos > pos + 1 &&
+        pathEndPos > position + 1 &&
         badPathEndChars.includes(str[pathEndPos - 1])
       ) pathEndPos--;
-      if (str[pos] === "/" || pathEndPos > pos + 1) {
-        pos = pathEndPos;
+      if (str[position] == CODEPOINTS["/"] || pathEndPos > position + 1) {
+        position = pathEndPos;
       }
     }
 
-    result.push([urlBegin, pos]);
+    result.push([urlBegin, position]);
   }
 
   return result;
@@ -447,30 +469,29 @@ export function matchTgURLs(str: string) {
 
 export function isProtocolSymbol(c: number) {
   if (c < 0x80) {
-    return isAlphaOrDigit(String.fromCodePoint(c)) ||
-      c == "+".codePointAt(0)! || c == "-".codePointAt(0)!;
+    return isAlphaOrDigit(c) || c == CODEPOINTS["+"] || c == CODEPOINTS["-"];
   }
-  return getUnicodeSimpleCategory(c) !== UnicodeSimpleCategory.Separator;
+  return getUnicodeSimpleCategory(c) != UnicodeSimpleCategory.Separator;
 }
 
 export function isUserDataSymbol(c: number) {
-  switch (String.fromCodePoint(c)) {
-    case "\n":
-    case "/":
-    case "[":
-    case "]":
-    case "{":
-    case "}":
-    case "(":
-    case ")":
-    case "'":
-    case "`":
-    case "<":
-    case ">":
-    case '"':
-    case "@":
-    case String.fromCodePoint(0xab):
-    case String.fromCodePoint(0xbb):
+  switch (c) {
+    case CODEPOINTS["\n"]:
+    case CODEPOINTS["/"]:
+    case CODEPOINTS["["]:
+    case CODEPOINTS["]"]:
+    case CODEPOINTS["{"]:
+    case CODEPOINTS["}"]:
+    case CODEPOINTS["("]:
+    case CODEPOINTS[")"]:
+    case CODEPOINTS["'"]:
+    case CODEPOINTS["`"]:
+    case CODEPOINTS["<"]:
+    case CODEPOINTS[">"]:
+    case CODEPOINTS['"']:
+    case CODEPOINTS["@"]:
+    case 0xab: // «
+    case 0xbb: // »
       return false;
     default:
       return isURLUnicodeSymbol(c);
@@ -479,104 +500,97 @@ export function isUserDataSymbol(c: number) {
 
 export function isDomainSymbol(c: number) {
   if (c < 0xc0) {
-    const char = String.fromCodePoint(c);
-    return char === "." ||
-      isAlphaDigitUnderscoreOrMinus(char) || char === "~";
+    return c == CODEPOINTS["."] || isAlphaDigitUnderscoreOrMinus(c) || c == CODEPOINTS["~"];
   }
   return isURLUnicodeSymbol(c);
 }
 
-export function matchURLs(str: string) {
+export function matchURLs(text: string) {
+  let str = encode(text);
   const result: Position[] = [];
   const begin = 0;
   let end = str.length;
 
-  const badPathEndChars = [".", ":", ";", ",", "(", "'", "?", "!", "`"];
+  const badPathEndChars = encode(".:;,('?!`");
 
   let done = 0;
 
   while (true) {
-    const dotPos = str.indexOf(".");
-    if (dotPos == -1) break;
-    if (dotPos > str.length || dotPos + 1 == str.length) break;
+    const dotPos = str.indexOf(CODEPOINTS["."]);
+    if (dotPos === -1) break;
+    if (dotPos > str.length || dotPos + 1 === str.length) break;
 
-    if (str[dotPos + 1] == " ") {
-      str = str.substring(dotPos + 2);
+    if (str[dotPos + 1] === CODEPOINTS[" "]) {
+      str = str.subarray(dotPos + 2);
       done += dotPos + 2;
       end = str.length;
       continue;
     }
 
     let domainBeginPos = begin + dotPos;
-    while (domainBeginPos != begin) {
-      domainBeginPos--;
-      const nextPos = domainBeginPos + 1;
-      const code = str.codePointAt(domainBeginPos)!;
+    while (domainBeginPos !== begin) {
+      domainBeginPos = prevUtf8Unsafe(str, domainBeginPos);
+      const { code, pos: nextPosition } = nextUtf8Unsafe(str, domainBeginPos);
       if (!isDomainSymbol(code)) {
-        domainBeginPos = nextPos;
+        domainBeginPos = nextPosition;
         break;
       }
     }
 
     let lastAtPos: number | undefined = undefined;
     let domainEndPos = begin + dotPos;
-    while (domainEndPos != end) {
-      const nextPos = domainEndPos + 1;
-      const code = str.codePointAt(domainEndPos)!;
-      if (str[domainEndPos] === "@") {
+    while (domainEndPos !== end) {
+      const { code, pos: nextPosition } = nextUtf8Unsafe(str, domainEndPos);
+      if (code === CODEPOINTS["@"]) {
         lastAtPos = domainEndPos;
       } else if (!isDomainSymbol(code)) {
         break;
       }
-      domainEndPos = nextPos;
+      domainEndPos = nextPosition;
     }
 
     if (lastAtPos != null) {
-      while (domainBeginPos != begin) {
-        domainBeginPos--;
-        const nextPos = domainBeginPos + 1;
-        const code = str.codePointAt(domainBeginPos)!;
+      while (domainBeginPos !== begin) {
+        domainBeginPos = prevUtf8Unsafe(str, domainBeginPos);
+        const { code, pos: nextPosition } = nextUtf8Unsafe(str, domainBeginPos);
         if (!isUserDataSymbol(code)) {
-          domainBeginPos = nextPos;
+          domainBeginPos = nextPosition;
           break;
         }
       }
     }
 
     let urlEndPos = domainEndPos;
-
-    if (urlEndPos != end && str[urlEndPos] === ":") {
+    if (urlEndPos !== end && str[urlEndPos] === CODEPOINTS[":"]) {
       let portEndPos = urlEndPos + 1;
-      while (portEndPos != end && isDigit(str[portEndPos])) {
+      while (portEndPos !== end && isDigit(str[portEndPos])) {
         portEndPos++;
       }
 
       let portBeginPos = urlEndPos + 1;
-      while (portBeginPos != portEndPos && str[portBeginPos] === "0") {
+      while (portBeginPos !== portEndPos && str[portBeginPos] === CODEPOINTS["0"]) {
         portBeginPos++;
       }
 
       if (
-        portBeginPos != portEndPos && (portEndPos - portBeginPos) <= 5 &&
-        parseInt(str.substring(portBeginPos, portEndPos)) <= 65535
+        portBeginPos !== portEndPos && (portEndPos - portBeginPos) <= 5 &&
+        parseInt(decode(str.subarray(portBeginPos, portEndPos))) <= 65535
       ) {
         urlEndPos = portEndPos;
       }
     }
 
     if (
-      urlEndPos != end &&
-      (str[urlEndPos] === "/" || str[urlEndPos] === "?" ||
-        str[urlEndPos] === "#")
+      urlEndPos !== end &&
+      (str[urlEndPos] === CODEPOINTS["/"] || str[urlEndPos] === CODEPOINTS["?"] || str[urlEndPos] === CODEPOINTS["#"])
     ) {
       let pathEndPos = urlEndPos + 1;
-      while (pathEndPos != end) {
-        const nextPos = pathEndPos + 1;
-        const code = str.codePointAt(pathEndPos)!;
+      while (pathEndPos !== end) {
+        const { code, pos: nextPosition } = nextUtf8Unsafe(str, pathEndPos);
         if (!isURLPathSymbol(code)) {
           break;
         }
-        pathEndPos = nextPos;
+        pathEndPos = nextPosition;
       }
       while (
         pathEndPos > urlEndPos + 1 &&
@@ -584,58 +598,55 @@ export function matchURLs(str: string) {
       ) {
         pathEndPos--;
       }
-      if (str[urlEndPos] === "/" || pathEndPos > urlEndPos + 1) {
+      if (str[urlEndPos] === CODEPOINTS["/"] || pathEndPos > urlEndPos + 1) {
         urlEndPos = pathEndPos;
       }
     }
-
-    while (urlEndPos > begin + dotPos + 1 && str[urlEndPos - 1] === ".") {
+    while (urlEndPos > begin + dotPos + 1 && str[urlEndPos - 1] === CODEPOINTS["."]) {
       urlEndPos--;
     }
 
     let isBad = false;
     let urlBeginPos = domainBeginPos;
-
-    if (urlBeginPos != begin && str[urlBeginPos - 1] === "@") {
-      if (lastAtPos != null) isBad = true;
+    if (urlBeginPos !== begin && str[urlBeginPos - 1] === CODEPOINTS["@"]) {
+      if (lastAtPos != null) {
+        isBad = true;
+      }
       let userDataBeginPos = urlBeginPos - 1;
-      while (userDataBeginPos != begin) {
-        userDataBeginPos--;
-        const nextPos = userDataBeginPos + 1;
-        const code = str.codePointAt(userDataBeginPos)!;
+      while (userDataBeginPos !== begin) {
+        userDataBeginPos = prevUtf8Unsafe(str, userDataBeginPos);
+        const { code, pos: nextPosition } = nextUtf8Unsafe(str, userDataBeginPos);
         if (!isUserDataSymbol(code)) {
-          userDataBeginPos = nextPos;
+          userDataBeginPos = nextPosition;
           break;
         }
       }
-      if (userDataBeginPos == urlBeginPos - 1) {
+      if (userDataBeginPos === urlBeginPos - 1) {
         isBad = true;
       }
       urlBeginPos = userDataBeginPos;
     }
 
-    if (urlBeginPos != begin) {
-      const prefix = str.substring(begin, urlBeginPos);
-      if (prefix.length >= 6 && prefix.endsWith("://")) {
+    if (urlBeginPos !== begin) {
+      const prefix = str.subarray(begin, urlBeginPos);
+      if (prefix.length >= 6 && endsWith(prefix, encode("://"))) {
         let protocolBeginPos = urlBeginPos - 3;
-        while (protocolBeginPos != begin) {
-          protocolBeginPos--;
-          const nextPos = protocolBeginPos + 1;
-          const code = str.codePointAt(protocolBeginPos)!;
+        while (protocolBeginPos !== begin) {
+          protocolBeginPos = prevUtf8Unsafe(str, protocolBeginPos);
+          const { code, pos: nextPosition } = nextUtf8Unsafe(str, protocolBeginPos);
           if (!isProtocolSymbol(code)) {
-            protocolBeginPos = nextPos;
+            protocolBeginPos = nextPosition;
             break;
           }
         }
-
-        const protocol = str.substring(protocolBeginPos, urlBeginPos - 3)
-          .toLowerCase();
-        if (protocol.endsWith("http") && protocol != "shttp") {
+        const protocol = toLower(str.subarray(protocolBeginPos, urlBeginPos - 3));
+        if (endsWith(protocol, encode("http")) && !areTypedArraysEqual(protocol, encode("shttp"))) {
           urlBeginPos = urlBeginPos - 7;
-        } else if (protocol.endsWith("https")) {
+        } else if (endsWith(protocol, encode("https"))) {
           urlBeginPos = urlBeginPos - 8;
         } else if (
-          protocol.endsWith("ftp") && protocol != "tftp" && protocol != "sftp"
+          endsWith(protocol, encode("ftp")) && !areTypedArraysEqual(protocol, encode("tftp")) &&
+          !areTypedArraysEqual(protocol, encode("sftp"))
         ) {
           urlBeginPos = urlBeginPos - 6;
         } else {
@@ -643,11 +654,10 @@ export function matchURLs(str: string) {
         }
       } else {
         const prefixEnd = prefix.length - 1;
-        const code = str.codePointAt(prefixEnd)!;
-        const char = String.fromCodePoint(code);
-        if (
-          isWordCharacter(code) || char == "/" || char == "#" || char === "@"
-        ) {
+        const prefixBack = prevUtf8Unsafe(str, prefixEnd);
+        const { pos } = nextUtf8Unsafe(str, prefixBack);
+        const code = prefix[pos];
+        if (isWordCharacter(code) || code === CODEPOINTS["/"] || code === CODEPOINTS["#"] || code === CODEPOINTS["@"]) {
           isBad = true;
         }
       }
@@ -657,11 +667,11 @@ export function matchURLs(str: string) {
       if (urlEndPos > begin + dotPos + 1) {
         result.push([done + urlBeginPos, done + urlEndPos]);
       }
-      while (urlEndPos != end && str[urlEndPos] === ".") {
+      while (urlEndPos !== end && str[urlEndPos] === CODEPOINTS["."]) {
         urlEndPos++;
       }
     } else {
-      while (str[urlEndPos - 1] != ".") {
+      while (str[urlEndPos - 1] !== CODEPOINTS["."]) {
         urlEndPos--;
       }
     }
@@ -670,7 +680,7 @@ export function matchURLs(str: string) {
       urlEndPos = begin + dotPos + 1;
     }
 
-    str = str.substring(urlEndPos - begin);
+    str = str.subarray(urlEndPos - begin);
     done += urlEndPos - begin;
     end = str.length;
   }
@@ -678,40 +688,36 @@ export function matchURLs(str: string) {
   return result;
 }
 
-export function isValidBankCard(str: string) {
+export function isValidBankCard(str: Uint8Array) {
   const MIN_CARD_LENGTH = 13;
   const MAX_CARD_LENGTH = 19;
-  const digits = new Array<string>(MAX_CARD_LENGTH);
+  const digits = new Array<number>(MAX_CARD_LENGTH);
   let digitCount = 0;
   for (const char of str) {
-    CHECK(digitCount < MAX_CARD_LENGTH);
-    if (isDigit(char)) digits[digitCount++] = char;
+    if (isDigit(char)) {
+      CHECK(digitCount < MAX_CARD_LENGTH);
+      digits[digitCount++] = char;
+    }
   }
   CHECK(digitCount >= MIN_CARD_LENGTH);
 
   let sum = 0;
   for (let i = digitCount; i > 0; i--) {
-    const digit = digits[i - 1].codePointAt(0)! - "0".codePointAt(0)!;
+    const digit = digits[i - 1] - CODEPOINTS["0"];
     if ((digitCount - i) % 2 == 0) sum += digit;
     else sum += digit < 5 ? 2 * digit : 2 * digit - 9;
   }
   if (sum % 10 != 0) return false;
 
-  const prefix1 = digits[0].codePointAt(0)! - "0".codePointAt(0)!;
-  const prefix2 = prefix1 * 10 +
-    (digits[1].codePointAt(0)! - "0".codePointAt(0)!);
-  const prefix3 = prefix2 * 10 +
-    (digits[2].codePointAt(0)! - "0".codePointAt(0)!);
-  const prefix4 = prefix3 * 10 +
-    (digits[3].codePointAt(0)! - "0".codePointAt(0)!);
+  const prefix1 = digits[0] - CODEPOINTS["0"];
+  const prefix2 = prefix1 * 10 + (digits[1] - CODEPOINTS["0"]);
+  const prefix3 = prefix2 * 10 + (digits[2] - CODEPOINTS["0"]);
+  const prefix4 = prefix3 * 10 + (digits[3] - CODEPOINTS["0"]);
   if (prefix1 == 4) {
     // Visa
-    return digitCount == 13 || digitCount == 16 || digitCount == 18 ||
-      digitCount == 19;
+    return digitCount == 13 || digitCount == 16 || digitCount == 18 || digitCount == 19;
   }
-  if (
-    (51 <= prefix2 && prefix2 <= 55) || (2221 <= prefix4 && prefix4 <= 2720)
-  ) {
+  if ((51 <= prefix2 && prefix2 <= 55) || (2221 <= prefix4 && prefix4 <= 2720)) {
     // mastercard
     return digitCount == 16;
   }
@@ -730,27 +736,33 @@ export function isValidBankCard(str: string) {
   return true;
 }
 
-export function isEmailAddress(str: string) {
-  const [userdata, domain] = str.split("@");
+export function isEmailAddress(str: Uint8Array) {
+  const [userdata, domain] = split(str, CODEPOINTS["@"]);
   if (!domain || domain.length == 0) return false;
 
   let prev = 0;
-  let userdata_part_count = 0;
+  let userdataPartCount = 0;
   for (let i = 0; i < userdata.length; i++) {
-    if (userdata[i] === "." || userdata[i] === "+") {
-      if (i - prev >= 27) return false;
-      userdata_part_count++;
+    if (userdata[i] === CODEPOINTS["."] || userdata[i] === CODEPOINTS["+"]) {
+      if (i - prev >= 27) {
+        return false;
+      }
+      userdataPartCount++;
       prev = i + 1;
     } else if (!isAlphaDigitUnderscoreOrMinus(userdata[i])) {
       return false;
     }
   }
-  userdata_part_count++;
-  if (userdata_part_count >= 12) return false;
+  userdataPartCount++;
+  if (userdataPartCount >= 12) {
+    return false;
+  }
   const lastPartLength = userdata.length - prev;
-  if (lastPartLength == 0 || lastPartLength >= 36) return false;
+  if (lastPartLength == 0 || lastPartLength >= 36) {
+    return false;
+  }
 
-  const domainParts = domain.split(".");
+  const domainParts = fullSplit(domain, CODEPOINTS["."]);
   if (domainParts.length <= 1 || domainParts.length > 7) return false;
   if (
     domainParts[domainParts.length - 1].length <= 1 ||
@@ -774,7 +786,7 @@ export function isEmailAddress(str: string) {
   return true;
 }
 
-export function isCommonTLD(str: string) {
+export function isCommonTLD(str: Uint8Array) {
   // deno-fmt-ignore
   const tlds = [
     "aaa", "aarp", "abarth", "abb", "abbott", "abbvie", "abc", "able", "abogado", "abudhabi", "ac", "academy",
@@ -908,116 +920,115 @@ export function isCommonTLD(str: string) {
 
   let isLower = true;
   for (const c of str) {
-    const unsigned = ((c.codePointAt(0)! - "a".codePointAt(0)!) & 0xFFFFFFFF) >>> 0;
-    if (unsigned > "z".codePointAt(0)! - "a".codePointAt(0)!) {
+    const unsigned = ((c - CODEPOINTS["a"]) & 0xFFFFFFFF) >>> 0;
+    if (unsigned > CODEPOINTS["z"] - CODEPOINTS["a"]) {
       isLower = false;
       break;
     }
   }
   if (isLower) {
-    return tlds.includes(str);
+    return tlds.includes(decode(str));
   }
 
-  const strLower = str.toLowerCase();
-  if (strLower !== str && strLower.substring(1) === str.substring(1)) {
+  const strLower = utf8ToLower(str);
+  if (!areTypedArraysEqual(strLower, str) && areTypedArraysEqual(utf8Substr(strLower, 1), utf8Substr(str, 1))) {
     return false;
   }
-  return tlds.includes(strLower);
+  return tlds.includes(decode(strLower));
 }
 
-export function fixURL(str: string) {
+export function fixURL(str: Uint8Array): Uint8Array {
   let fullUrl = str;
 
   let hasProtocol = false;
-  const strBegin = str.substring(0, 9).toLowerCase();
+  const strBegin = toLower(str.subarray(0, 9));
   if (
-    strBegin.startsWith("http://") || strBegin.startsWith("https://") ||
-    strBegin.startsWith("ftp://")
+    beginsWith(strBegin, encode("http://")) || beginsWith(strBegin, encode("https://")) ||
+    beginsWith(strBegin, encode("ftp://"))
   ) {
-    const pos = str.indexOf(":");
-    str = str.substring(pos + 3);
+    const pos = str.indexOf(CODEPOINTS[":"]);
+    str = str.subarray(pos + 3);
     hasProtocol = true;
   }
 
-  function maxNegativeOne(x: number) {
-    return x == -1 ? Number.MAX_VALUE : x;
+  function maxNegativeOne(x: number, max: number) {
+    return x === -1 ? max : x;
   }
 
   const domainEnd = Math.min(
     str.length,
-    maxNegativeOne(str.indexOf("/")),
-    maxNegativeOne(str.indexOf("?")),
-    maxNegativeOne(str.indexOf("#")),
+    maxNegativeOne(str.indexOf(CODEPOINTS["/"]), str.length),
+    maxNegativeOne(str.indexOf(CODEPOINTS["?"]), str.length),
+    maxNegativeOne(str.indexOf(CODEPOINTS["#"]), str.length),
   );
-  let domain = str.substring(0, domainEnd);
-  const path = str.substring(domainEnd);
+  let domain = str.subarray(0, domainEnd);
+  const path = str.subarray(domainEnd);
 
-  const atPos = domain.indexOf("@");
+  const atPos = domain.indexOf(CODEPOINTS["@"]);
   if (atPos < domain.length) {
-    domain = domain.substring(atPos + 1);
+    domain = domain.subarray(atPos + 1);
   }
-  const lastIndexOfColon = domain.lastIndexOf(":");
-  domain = domain.substring(
-    0,
-    lastIndexOfColon == -1 ? undefined : lastIndexOfColon,
-  );
+  const lastIndexOfColon = domain.lastIndexOf(CODEPOINTS[":"]);
+  domain = domain.subarray(0, lastIndexOfColon === -1 ? undefined : lastIndexOfColon);
 
-  if (domain.length == 12 && (domain[0] === "t" || domain[0] === "T")) {
-    if (domain.toLowerCase() === "teiegram.org") return "";
+  if (domain.length === 12 && (domain[0] === CODEPOINTS["t"] || domain[0] === CODEPOINTS["T"])) {
+    if (decode(toLower(domain)) === "teiegram.org") return new Uint8Array();
   }
 
-  const balance = new Array<number>(3).fill(0);
+  const balance: [number, number, number] = [0, 0, 0];
   let pathPos = 0;
   for (pathPos; pathPos < path.length; pathPos++) {
     switch (path[pathPos]) {
-      case "(":
+      case CODEPOINTS["("]:
         balance[0]++;
         break;
-      case "[":
+      case CODEPOINTS["["]:
         balance[1]++;
         break;
-      case "{":
+      case CODEPOINTS["{"]:
         balance[2]++;
         break;
-      case ")":
+      case CODEPOINTS[")"]:
         balance[0]--;
         break;
-      case "]":
+      case CODEPOINTS["]"]:
         balance[1]--;
         break;
-      case "}":
+      case CODEPOINTS["}"]:
         balance[2]--;
         break;
     }
-    if (balance[0] < 0 || balance[1] < 0 || balance[2] < 0) break;
+    if (balance[0] < 0 || balance[1] < 0 || balance[2] < 0) {
+      break;
+    }
   }
 
-  const badPathEndChars = [".", ":", ";", ",", "(", "'", "?", "!", "`"];
+  const badPathEndChars = encode(".:;,('?!`");
   while (pathPos > 0 && badPathEndChars.includes(path[pathPos - 1])) {
     pathPos--;
   }
-  fullUrl = fullUrl.substring(0, fullUrl.length - (path.length - pathPos));
+  fullUrl = fullUrl.subarray(0, fullUrl.length - (path.length - pathPos));
 
   let prev = 0;
   let domainPartCount = 0;
   let hasNonDigit = false;
   let isIpv4 = true;
   for (let i = 0; i <= domain.length; i++) {
-    if (i == domain.length || domain[i] === ".") {
+    if (i == domain.length || domain[i] === CODEPOINTS["."]) {
       const partSize = i - prev;
-      if (partSize == 0 || partSize >= 64 || domain[i - 1] === "-") return "";
+      if (partSize === 0 || partSize >= 64 || domain[i - 1] === CODEPOINTS["-"]) return new Uint8Array();
       if (isIpv4) {
         if (partSize > 3) isIpv4 = false;
         if (
-          partSize == 3 &&
-          (domain[prev] >= "3" ||
-            (domain[prev] == "2" &&
-              (domain[prev + 1] >= "6" ||
-                (domain[prev + 1] == "5" && domain[prev + 2] >= "6"))))
+          partSize === 3 &&
+          (domain[prev] >= CODEPOINTS["3"] ||
+            (domain[prev] === CODEPOINTS["2"] &&
+              (domain[prev + 1] >= CODEPOINTS["6"] ||
+                (domain[prev + 1] === CODEPOINTS["5"] && domain[prev + 2] >= CODEPOINTS["6"]))))
         ) {
           isIpv4 = false;
         }
-        if (domain[prev] == "0" && partSize >= 2) isIpv4 = false;
+        if (domain[prev] === CODEPOINTS["0"] && partSize >= 2) isIpv4 = false;
       }
 
       domainPartCount++;
@@ -1028,29 +1039,29 @@ export function fixURL(str: string) {
     }
   }
 
-  if (domainPartCount == 1) return "";
+  if (domainPartCount === 1) return new Uint8Array();
   if (isIpv4 && domainPartCount == 4) return fullUrl;
-  if (!hasNonDigit) return "";
+  if (!hasNonDigit) return new Uint8Array();
 
-  const tld = domain.substring(prev);
-  if (tld.length <= 1) return "";
+  const tld = domain.subarray(prev);
+  if (utf8Length(tld) <= 1) return new Uint8Array();
 
-  if (tld.startsWith("xn--")) {
-    if (tld.length <= 5) return "";
-    for (const c of tld.substring(4)) {
-      if (!isAlphaOrDigit(c)) return "";
+  if (beginsWith(tld, encode("xn--"))) {
+    if (tld.length <= 5) return new Uint8Array();
+    for (const c of tld.subarray(4)) {
+      if (!isAlphaOrDigit(c)) return new Uint8Array();
     }
   } else {
-    if (tld.indexOf("_") != -1) return "";
-    if (tld.indexOf("-") != -1) return "";
-    if (!hasProtocol && !isCommonTLD(tld)) return "";
+    if (tld.indexOf(CODEPOINTS["_"]) != -1) return new Uint8Array();
+    if (tld.indexOf(CODEPOINTS["-"]) != -1) return new Uint8Array();
+    if (!hasProtocol && !isCommonTLD(tld)) return new Uint8Array();
   }
 
   CHECK(prev > 0);
   prev--;
   while (prev-- > 0) {
-    if (domain[prev] === "_") return "";
-    else if (domain[prev] === ".") break;
+    if (domain[prev] === CODEPOINTS["_"]) return new Uint8Array();
+    else if (domain[prev] === CODEPOINTS["."]) break;
   }
 
   return fullUrl;
@@ -1093,7 +1104,7 @@ export function findCashtags(str: string) {
 
 export function findBankCardNumbers(str: string) {
   return matchBankCardNumbers(str).filter(([start, end]) => {
-    return isValidBankCard(str.substring(start, end));
+    return isValidBankCard(encode(str).subarray(start, end));
   });
 }
 
@@ -1104,10 +1115,10 @@ export function findTgURLs(str: string) {
 export function findURLs(str: string) {
   const result: [Position, boolean][] = [];
   for (const [s, e] of matchURLs(str)) {
-    let url = str.substring(s, e);
+    let url = encode(str).subarray(s, e);
     if (isEmailAddress(url)) {
       result.push([[s, e], true]);
-    } else if (url.startsWith("mailto:") && isEmailAddress(url.substring(7))) {
+    } else if (beginsWith(url, encode("mailto:")) && isEmailAddress(url.subarray(7))) {
       result.push([[s + 7, s + url.length], true]);
     } else {
       url = fixURL(url);

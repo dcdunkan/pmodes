@@ -22,7 +22,7 @@ const decode = (data: Uint8Array) => decoder.decode(data);
 
 function checkFn(fn: (text: string) => [number, number][]) {
   return (text: string, expected: string[]) => {
-    assertEquals(fn(text).map(([s, e]) => decode(encode(text).slice(s, e))), expected);
+    assertEquals(fn(text).map(([s, e]) => decode(encode(text).subarray(s, e))), expected);
   };
 }
 
@@ -170,7 +170,7 @@ Deno.test("cashtags", () => {
 Deno.test("media timestamps", () => {
   const check = (text: string, expected: [string, number][]) => {
     assertEquals(
-      findMediaTimestamps(text).map(([[s, e], t]) => [text.substring(s, e), t]),
+      findMediaTimestamps(text).map(([[s, e], t]) => [decode(encode(text).subarray(s, e)), t]),
       expected,
     );
   };
@@ -314,7 +314,7 @@ Deno.test("tg urls", () => {
 
 Deno.test("email address", () => {
   const check = (text: string, expected: boolean) => {
-    return assertEquals(isEmailAddress(text), expected);
+    return assertEquals(isEmailAddress(encode(text)), expected);
   };
 
   check("telegram.org", false);
@@ -446,8 +446,8 @@ Deno.test("url", () => {
     const resultUrls: string[] = [];
     const resultEmailAddress: string[] = [];
     for (const [[start, end], email] of results) {
-      if (!email) resultUrls.push(str.substring(start, end));
-      else resultEmailAddress.push(str.substring(start, end));
+      if (!email) resultUrls.push(decode(encode(str).subarray(start, end)));
+      else resultEmailAddress.push(decode(encode(str).subarray(start, end)));
     }
     assertEquals(resultUrls, expectedUrls);
     assertEquals(resultEmailAddress, expectedEmailAddresses);
