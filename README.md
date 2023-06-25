@@ -7,21 +7,18 @@
 A **work-in-progress** TypeScript implementation of [TDLib](https://github.com/tdlib/td)'s functions and utilities
 related to parsing text with several parse modes and matching text entities.
 
-Few more methods are left to be implemented. But the tests are direclty ported from TDLib source without a change. And
-they seem to be passing. So, I'll take that as a "it works"!
+> Synced with
+> [tdlib/td/7c3822d932f96aeca2861b6ae0cb25eacb27136f](https://github.com/tdlib/td/tree/7c3822d932f96aeca2861b6ae0cb25eacb27136f).
 
-I cannot assure you the quality of the implementation, as I'm **not** good at C++ (TDLib is written in C++). So, I
-probably have done few stupid things because I missed how C++ actually works.
+Few more methods are left to be implemented. But the tests are direclty ported from TDLib source without a change. And
+they seem to be passing. So, I'll take that as a "it works"! I cannot assure you the quality of the implementation, as
+I'm **not** good at C++ (TDLib is written in C++). So, I probably have done few stupid things because I missed how C++
+actually works.
 
 Anyway, thank you so much.
 
-
 For now, here is what have been ported properly. But of course, they still might have a few bugs. And I'm just showing
 off!
-
-<details>
-<summary>Open to see the list</summary>
-
 
 ```text
 match.ts (td/telegram/MessageEntity.cpp)
@@ -98,7 +95,7 @@ begins_with
 ends_with
 is_space
 is_alpha
-is_alpha` from misc.
+is_alpha (from misc.h)
 is_alnum
 is_digit
 is_alpha_digit
@@ -143,7 +140,7 @@ HttpUrl
 HttpUrlProtocol
 parse_url
 IpAddress
-parse_ipv6` (a compatible port from core-js
+parse_ipv6 (a compatible port from core-js)
 LinkManager::getLinkUserId
 LinkManager::getLinkCustomEmojiId
 LinkManager::getCheckedLink
@@ -152,5 +149,3 @@ UserId
 ```
 
 > \* Most likely too buggy.
-
-</details>
