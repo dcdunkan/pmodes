@@ -20,7 +20,7 @@ For now, here is what have been ported properly. But of course, they still might
 off!
 
 <details>
-<summary><h5>List</h5></summary>
+<summary>Open to see the list</summary>
 
 
 ```text
