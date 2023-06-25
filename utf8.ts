@@ -1,6 +1,6 @@
 import { unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
 import { unicodeToLower } from "./unicode.ts";
-import { encode, mergeTypedArrays } from "./encode.ts";
+import { mergeTypedArrays } from "./encode.ts";
 
 export function isUTF8CharacterFirstCodeUnit(c: number): boolean {
   return (c & 0xC0) != 0x80;

@@ -740,12 +740,12 @@ Deno.test("parse markdown v2", () => {
         parseMarkdownV2(str);
       } catch (err) {
         assert(err instanceof Error);
-        assertStrictEquals(result, err.message);
+        assertStrictEquals(err.message, result);
       }
     } else {
       const parsed = parseMarkdownV2(str);
-      assertStrictEquals(result, decode(parsed.text));
-      assertEquals(entities, parsed.entities);
+      assertStrictEquals(decode(parsed.text), result);
+      assertEquals(parsed.entities, entities);
     }
   };
 
@@ -910,13 +910,13 @@ Deno.test("parse html", () => {
         parseHTML(str);
       } catch (err) {
         assert(err instanceof Error);
-        console.log(err.message);
-        assertStrictEquals(result, err.message);
+        console.log({ errorMsg: err.message });
+        assertStrictEquals(err.message, result);
       }
     } else {
       const parsed = parseHTML(str);
-      assertStrictEquals(result, decode(parsed.text));
-      assertEquals(entities, parsed.entities);
+      assertStrictEquals(decode(parsed.text), result);
+      assertEquals(parsed.entities, entities);
     }
   };
 
@@ -1026,7 +1026,12 @@ Deno.test("parse html", () => {
     { type: "bold", offset: 0, length: 1 },
     { type: "code", offset: 2, length: 1 },
   ]);
-  check("<a href=telegram.org> </a>", " ", [{ type: "text_link", offset: 0, length: 1, url: encode("http://telegram.org/") }]);
+  check("<a href=telegram.org> </a>", " ", [{
+    type: "text_link",
+    offset: 0,
+    length: 1,
+    url: encode("http://telegram.org/"),
+  }]);
   check('<a href  ="telegram.org"   > </a>', " ", [{
     type: "text_link",
     offset: 0,

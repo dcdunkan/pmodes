@@ -119,6 +119,15 @@ export function isAlpha(codepoint: number): boolean {
     (CODEPOINTS["a"] <= codepoint && codepoint <= CODEPOINTS["z"]);
 }
 
+export function isAlpha2(codepoint: number): boolean {
+  codepoint |= 0x20;
+  return CODEPOINTS["a"] <= codepoint && codepoint <= CODEPOINTS["z"];
+}
+
+export function isAlNum(codepoint: number): boolean {
+  return isAlpha2(codepoint) || isDigit(codepoint);
+}
+
 export function isDigit(codepoint: number): boolean {
   return CODEPOINTS["0"] <= codepoint && codepoint <= CODEPOINTS["9"];
 }
@@ -137,8 +146,8 @@ export function isAlphaDigitUnderscoreOrMinus(codepoint: number): boolean {
 
 export function isHexDigit(codepoint: number) {
   if (isDigit(codepoint)) return true;
-  const code = codepoint | 0x20;
-  return CODEPOINTS["a"] <= code && code <= CODEPOINTS["f"];
+  codepoint |= 0x20;
+  return CODEPOINTS["a"] <= codepoint && codepoint <= CODEPOINTS["f"];
 }
 
 export function hexToInt(codepoint: number) {
