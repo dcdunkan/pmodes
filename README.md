@@ -15,8 +15,12 @@ probably have done few stupid things because I missed how C++ actually works.
 
 Anyway, thank you so much.
 
+<details>
+
+<summary>
 For now, here is what have been ported properly. But of course, they still might have a few bugs. And I'm just showing
 off!
+</summary>
 
 ###### match.ts (td/telegram/MessageEntity.cpp)
 
@@ -140,3 +144,5 @@ off!
 - [x] `UserId`
 
 > \* Most likely too buggy.
+
+</details>
