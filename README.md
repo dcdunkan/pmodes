@@ -22,126 +22,133 @@ For now, here is what have been ported properly. But of course, they still might
 off!
 </summary>
 
-###### match.ts (td/telegram/MessageEntity.cpp)
+```text
+match.ts (td/telegram/MessageEntity.cpp)
+========================================
 
-- [x] `match_mentions`
-- [x] `match_bot_commands`
-- [x] `match_hashtags`
-- [x] `match_cashtags`
-- [x] `match_media_timestamps`
-- [x] `match_bank_card_numbers`
-- [x] `is_url_unicode_symbol`
-- [x] `is_url_path_symbol`
-- [x] `match_tg_urls`
-- [x] `is_protocol_symbol`
-- [x] `is_user_data_symbol`
-- [x] `is_domain_symbol`
-- [x] `match_urls`
-- [x] `is_valid_bank_card`
-- [x] `is_email_address`
-- [x] `is_common_tld`
-- [x] `fix_url`
-- [x] `get_valid_short_usernames`
-- [x] `find_mentions`
-- [x] `find_bot_commands`
-- [x] `find_hashtags`
-- [x] `find_cashtags`
-- [x] `find_bank_card_numbers`
-- [x] `find_tg_urls`
-- [x] `find_urls`
-- [x] `find_media_timestamps`
-- [x] `text_length`
-- [x] `get_type_priority`
-- [x] `remove_empty_entities`
-- [x] `sort_entities`
-- [x] `check_is_sorted`
-- [x] `check_non_intersecting`
-- [x] `get_entity_type_mask`
-- [x] `get_splittable_entities_mask`
-- [x] `get_blockquote_entities_mask`
-- [x] `get_continuous_entities_mask`
-- [x] `get_pre_entities_mask`
-- [x] `get_user_entities_mask`
-- [x] `is_splittable_entity`
-- [x] `is_blockquote_entity`
-- [x] `is_continuous_entity`
-- [x] `is_pre_entity`
-- [x] `is_user_entity`
-- [x] `is_hidden_data_entity`
-- [x] `get_splittable_entity_type_index`
-- [x] `are_entities_valid`
-- [x] `remove_intersecting_entities`
-- [x] `remove_entities_intersecting_blockquote`
-- [x] `fix_entity_offsets`
-- [x] `find_entities`
-- [x] `find_media_timestamp_entities`
-- [x] `merge_entities`
-- [x] `is_plain_domain`
-- [x] `get_first_url`
-- [x] `parse_markdown`
-- [x] `parse_markdown_v2`
-- [x] `decode_html_entity`
-- [ ] `parse_html`*
+match_mentions
+match_bot_commands
+match_hashtags
+match_cashtags
+match_media_timestamps
+match_bank_card_numbers
+is_url_unicode_symbol
+is_url_path_symbol
+match_tg_urls
+is_protocol_symbol
+is_user_data_symbol
+is_domain_symbol
+match_urls
+is_valid_bank_card
+is_email_address
+is_common_tld
+fix_url
+get_valid_short_usernames
+find_mentions
+find_bot_commands
+find_hashtags
+find_cashtags
+find_bank_card_numbers
+find_tg_urls
+find_urls
+find_media_timestamps
+text_length
+get_type_priority
+remove_empty_entities
+sort_entities
+check_is_sorted
+check_non_intersecting
+get_entity_type_mask
+get_splittable_entities_mask
+get_blockquote_entities_mask
+get_continuous_entities_mask
+get_pre_entities_mask
+get_user_entities_mask
+is_splittable_entity
+is_blockquote_entity
+is_continuous_entity
+is_pre_entity
+is_user_entity
+is_hidden_data_entity
+get_splittable_entity_type_index
+are_entities_valid
+remove_intersecting_entities
+remove_entities_intersecting_blockquote
+fix_entity_offsets
+find_entities
+find_media_timestamp_entities
+merge_entities
+is_plain_domain
+get_first_url
+parse_markdown
+parse_markdown_v2
+decode_html_entity
+parse_html`
 
-###### utilities.ts (from a lot of files)
+utilities.ts (from a lot of files)
+==================================
 
-- [x] `is_word_character`
-- [x] `to_lower_begins_with`
-- [x] `to_lower`
-- [x] `split`
-- [x] `full_split`
-- [x] `begins_with`
-- [x] `ends_with`
-- [x] `is_space`
-- [x] `is_alpha`
-- [x] `is_alpha` from misc.h
-- [x] `is_alnum`
-- [x] `is_digit`
-- [x] `is_alpha_digit`
-- [x] `is_alpha_digit_or_underscore`
-- [x] `is_alpha_digit_underscore_or_minus`
-- [x] `is_hex_digit`
-- [x] `hex_to_int`
-- [x] `is_hashtag_letter`
-- [x] `CHECK`
-- [x] `LOG_CHECK`
+is_word_character
+to_lower_begins_with
+to_lower
+split
+full_split
+begins_with
+ends_with
+is_space
+is_alpha
+is_alpha` from misc.
+is_alnum
+is_digit
+is_alpha_digit
+is_alpha_digit_or_underscore
+is_alpha_digit_underscore_or_minus
+is_hex_digit
+hex_to_int
+is_hashtag_letter
+CHECK
+LOG_CHECK
 
-###### unicode.ts (tdutils/td/utils/unicode.cpp)
+unicode.ts (tdutils/td/utils/unicode.cpp)
+=========================================
 
-- [x] `UnicodeSimpleCategory`
-- [x] `get_unicode_simple_category`
-- [x] `binary_search_ranges`
-- [x] `unicode_to_lower`
+UnicodeSimpleCategory
+get_unicode_simple_category
+binary_search_ranges
+unicode_to_lower
 
-###### utf8.ts (tdutils/td/utils/utf8.cpp)
+utf8.ts (tdutils/td/utils/utf8.cpp)
+===================================
 
-- [x] `is_utf8_character_first_code_unit`
-- [x] `utf8_length`
-- [x] `utf8_utf16_length`
-- [x] `prev_utf8_unsafe`
-- [x] `next_utf8_unsafe`
-- [x] `append_utf8_character`
-- [x] `append_utf8_character_unsafe`
-- [x] `utf8_to_lower`
-- [x] `utf8_truncate`
-- [x] `utf8_utf16_truncate`
-- [x] `utf8_substr`
-- [x] `utf8_utf16_substr`
-- [x] `check_utf8`
+is_utf8_character_first_code_unit
+utf8_length
+utf8_utf16_length
+prev_utf8_unsafe
+next_utf8_unsafe
+append_utf8_character
+append_utf8_character_unsafe
+utf8_to_lower
+utf8_truncate
+utf8_utf16_truncate
+utf8_substr
+utf8_utf16_substr
+check_utf8
 
-###### other stuff
+other stuff
+===========
 
-- [x] `CustomEmojiId`
-- [x] `HttpUrl`
-- [x] `HttpUrlProtocol`
-- [x] `parse_url`
-- [x] `IpAddress`
-- [x] `parse_ipv6` (a compatible port from core-js)
-- [x] `LinkManager::getLinkUserId`
-- [x] `LinkManager::getLinkCustomEmojiId`
-- [x] `LinkManager::getCheckedLink`
-- [x] `LinkManager::checkLinkImpl`
-- [x] `UserId`
+CustomEmojiId
+HttpUrl
+HttpUrlProtocol
+parse_url
+IpAddress
+parse_ipv6` (a compatible port from core-js
+LinkManager::getLinkUserId
+LinkManager::getLinkCustomEmojiId
+LinkManager::getCheckedLink
+LinkManager::checkLinkImpl
+UserId
+```
 
 > \* Most likely too buggy.
 
