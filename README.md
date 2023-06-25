@@ -81,7 +81,7 @@ get_first_url
 parse_markdown
 parse_markdown_v2
 decode_html_entity
-parse_html`
+parse_html*
 
 utilities.ts (from a lot of files)
 ==================================
