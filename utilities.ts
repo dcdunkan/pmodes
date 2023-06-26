@@ -36,8 +36,6 @@ export function isWordCharacter(code: number) {
   }
 }
 
-export function tolowerBeginsWith(str: Uint8Array, prefix: string): boolean;
-export function tolowerBeginsWith(str: Uint8Array, prefix: Uint8Array): boolean;
 export function tolowerBeginsWith(str: Uint8Array, prefix: string | Uint8Array): boolean {
   prefix = typeof prefix === "string" ? encode(prefix) : prefix;
   if (prefix.length > str.length) {
@@ -87,22 +85,16 @@ export function fullSplit(
   return result;
 }
 
-export function areTypedArraysEqual(a: Uint8Array, b: string): boolean;
-export function areTypedArraysEqual(a: Uint8Array, b: Uint8Array): boolean;
 export function areTypedArraysEqual(a: Uint8Array, b: string | Uint8Array): boolean {
   b = typeof b === "string" ? encode(b) : b;
   return a.byteLength === b.byteLength && !a.some((val, i) => val !== b[i]);
 }
 
-export function beginsWith(str: Uint8Array, prefix: string): boolean;
-export function beginsWith(str: Uint8Array, prefix: Uint8Array): boolean;
 export function beginsWith(str: Uint8Array, prefix: string | Uint8Array): boolean {
   prefix = typeof prefix === "string" ? encode(prefix) : prefix;
   return prefix.length <= str.length && areTypedArraysEqual(str.slice(0, prefix.length), prefix);
 }
 
-export function endsWith(str: Uint8Array, suffix: string): boolean;
-export function endsWith(str: Uint8Array, suffix: Uint8Array): boolean;
 export function endsWith(str: Uint8Array, suffix: string | Uint8Array): boolean {
   suffix = typeof suffix === "string" ? encode(suffix) : suffix;
   return suffix.length <= str.length && areTypedArraysEqual(str.slice(str.length - suffix.length), suffix);
