@@ -101,9 +101,8 @@ export function endsWith(str: Uint8Array, suffix: string | Uint8Array): boolean 
 }
 
 export function isSpace(codepoint: number): boolean {
-  return (codepoint == CODEPOINTS[" "] || codepoint == CODEPOINTS["\t"] || codepoint == CODEPOINTS["\r"] ||
-    codepoint == CODEPOINTS["\n"] ||
-    codepoint == CODEPOINTS["\0"] || codepoint == CODEPOINTS["\v"]);
+  return (codepoint === CODEPOINTS[" "] || codepoint === CODEPOINTS["\t"] || codepoint === CODEPOINTS["\r"] ||
+    codepoint === CODEPOINTS["\n"] || codepoint === CODEPOINTS["\0"] || codepoint === CODEPOINTS["\v"]);
 }
 
 export function isAlpha(codepoint: number): boolean {

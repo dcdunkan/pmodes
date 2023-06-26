@@ -2050,12 +2050,6 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
   return { text: text.slice(0, resultSize), entities };
 }
 
-// deno-lint-ignore no-explicit-any
-function isUint8Array(x: any): x is Uint8Array {
-  return x.BYTES_PER_ELEMENT === 1 && x.byteLength != null && x.length != null && x.subarray != null &&
-    ArrayBuffer.isView(x.buffer);
-}
-
 export function decodeHTMLEntity(text: Uint8Array, pos: number) {
   CHECK(text[pos] === CODEPOINTS["&"]);
   let endPos = pos + 1;
@@ -2218,7 +2212,7 @@ export function parseHTML(str: Uint8Array) {
           }
         } else {
           const endCharacter = text[i++];
-          let attributeEnd = str[i];
+          let attributeEnd = i;
           const attributeBegin = attributeEnd;
           while (text[i] !== endCharacter && text[i] !== 0 && text[i] != null) {
             if (text[i] === CODEPOINTS["&"]) {
@@ -2335,8 +2329,8 @@ export function parseHTML(str: Uint8Array) {
           const last = entities[entities.length - 1];
           if (
             entities.length !== 0 && last.type === "code" && last.offset === entityOffset &&
-            last.length === entityLength && "argument" in last && last.argument != null &&
-            (last.argument as Uint8Array).length !== 0
+            last.length === entityLength && "language" in last && last.language != null &&
+            (last.language as Uint8Array).length !== 0
           ) {
             entities[entities.length - 1].type = "pre_code";
           } else {
@@ -2352,12 +2346,13 @@ export function parseHTML(str: Uint8Array) {
             entities[entities.length - 1].type = "pre_code";
             (entities[entities.length - 1] as MessageEntity.PreMessageEntity).language = lastNested.argument;
           } else {
+            const language = nestedEntities.at(-1)?.argument;
             entities.push({
               type: "code",
               offset: entityOffset,
               length: entityLength,
               // @ts-ignore This is how it is.
-              argument: nestedEntities.at(-1)?.argument,
+              ...((language == null || language.length === 0) ? {} : { language: nestedEntities.at(-1)?.argument }),
             });
           }
         } else {
@@ -2373,8 +2368,8 @@ export function parseHTML(str: Uint8Array) {
   }
 
   for (const entity of entities) {
-    if (entity.type === "code" && "argument" in entity && (entity.argument as Uint8Array).length === 0) {
-      delete entity.argument;
+    if (entity.type === "code" && "language" in entity && (entity.language as Uint8Array).length !== 0) {
+      delete entity.language;
     }
   }
 

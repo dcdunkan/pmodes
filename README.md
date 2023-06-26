@@ -19,9 +19,7 @@ actually works.
 
 ###### For now, here is what have been ported properly. But of course, they still might have a few bugs. And I'm just showing off!
 
-```diff
-+ match.ts
-+ td/telegram/MessageEntity.cpp
+> match.ts (td/telegram/MessageEntity.cpp)
 
 * match_mentions
 * match_bot_commands
@@ -80,10 +78,9 @@ actually works.
 * parse_markdown
 * parse_markdown_v2
 * decode_html_entity
-* (*) parse_html
+* parse_html
 
-+ utilities.ts
-+ from a lot of source files
+> utilities.ts (from a lot of source files)
 
 * is_word_character
 * to_lower_begins_with
@@ -106,16 +103,14 @@ actually works.
 * CHECK
 * LOG_CHECK
 
-+ unicode.ts
-+ tdutils/td/utils/unicode.cpp
+> unicode.ts (tdutils/td/utils/unicode.cpp)
 
 * UnicodeSimpleCategory
 * get_unicode_simple_category
 * binary_search_ranges
 * unicode_to_lower
 
-+ utf8.ts
-+ tdutils/td/utils/utf8.cpp
+> utf8.ts (tdutils/td/utils/utf8.cpp)
 
 * is_utf8_character_first_code_unit
 * utf8_length
@@ -131,7 +126,7 @@ actually works.
 * utf8_utf16_substr
 * check_utf8
 
-+ other stuff
+> Other stuff
 
 * CustomEmojiId
 * HttpUrl
@@ -140,12 +135,11 @@ actually works.
 * IpAddress
 * parse_ipv6 (a compatible port from core-js)
 * LinkManager
-  # getLinkUserId
-  # getLinkCustomEmojiId
-  # getCheckedLink
-  # checkLinkImpl
+  * getLinkUserId
+  * getLinkCustomEmojiId
+  * getCheckedLink
+  * checkLinkImpl
 * UserId
-```
 
 > \* Most likely too buggy.
 

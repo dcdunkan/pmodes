@@ -903,14 +903,12 @@ Deno.test("parse markdown v2", () => {
 
 Deno.test("parse html", () => {
   const check = (text: string, result: string, entities?: MessageEntity[]) => {
-    console.log(text);
     const str = encode(text);
     if (entities == null) {
       try {
         parseHTML(str);
       } catch (err) {
         assert(err instanceof Error);
-        console.log({ errorMsg: err.message });
         assertStrictEquals(err.message, result);
       }
     } else {
