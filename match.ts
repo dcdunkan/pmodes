@@ -2122,7 +2122,7 @@ export function parseHTML(str: Uint8Array) {
 
   let entities: MessageEntity[] = [];
   let utf16Offset = 0;
-  let needRecheckUTF8 = false;
+  let needRecheckUtf8 = false;
 
   interface EntityInfo {
     tagName: Uint8Array;
@@ -2130,7 +2130,6 @@ export function parseHTML(str: Uint8Array) {
     entityOffset: number;
     entityBeginPos: number;
   }
-
   const nestedEntities: EntityInfo[] = [];
 
   for (let i = 0; i < strSize; i++) {
@@ -2142,7 +2141,7 @@ export function parseHTML(str: Uint8Array) {
         i--;
         utf16Offset += 1 + (code.res > 0xffff ? 1 : 0);
         if (code.res >= 0xd800 && code.res <= 0xdfff) {
-          needRecheckUTF8 = true;
+          needRecheckUtf8 = true;
         }
         resultEnd = appendUTF8CharacterUnsafe(str, resultEnd, code.res);
         CHECK(resultEnd <= resultBegin + i);
@@ -2157,10 +2156,9 @@ export function parseHTML(str: Uint8Array) {
       continue;
     }
 
-    console.log({ i, resultEnd });
     const beginPos = i++;
-    if (text[i] !== CODEPOINTS["/"]) {
-      while (text[i] != null && !isSpace(text[i]) && text[i] !== CODEPOINTS[">"]) {
+    if (text[i] != null && text[i] !== CODEPOINTS["/"]) {
+      while (text[i] != null && !isSpace(text[i]) && text[i] != CODEPOINTS[">"]) {
         i++;
       }
       if (text[i] == null || text[i] == 0) {
@@ -2169,13 +2167,14 @@ export function parseHTML(str: Uint8Array) {
 
       const tagName = toLower(text.slice(beginPos + 1, i));
 
-      if (!TAG_NAMES.some((tag) => areTypedArraysEqual(tagName, tag))) {
-        throw new Error(`Unsupported start tag "${decode(tagName)}" at byte offset ${beginPos}`);
+      if (!TAG_NAMES.some((allowedTag) => areTypedArraysEqual(tagName, allowedTag))) {
+        throw new Error('Unsupported start tag "' + decode(tagName) + '" at byte offset ' + beginPos);
       }
 
       let argument = new Uint8Array();
-      while (text[i] !== CODEPOINTS[">"]) {
-        while (text[i] !== 0 && isSpace(text[i])) {
+
+      while (text[i] != null && text[i] != CODEPOINTS[">"]) {
+        while (text[i] != null && text[i] !== 0 && isSpace(text[i])) {
           i++;
         }
         if (text[i] === CODEPOINTS[">"]) {
@@ -2187,41 +2186,41 @@ export function parseHTML(str: Uint8Array) {
         }
         const attributeName = text.slice(attributeBeginPos, i);
         if (attributeName.length === 0) {
-          throw new Error(`Empty attribute name in the tag "${decode(tagName)}" at byte offset ${beginPos}`);
+          throw new Error('Empty attribute name in the tag "' + decode(tagName) + '" at byte offset ' + beginPos);
         }
-        while (text[i] != 0 && isSpace(text[i])) {
+        while (text[i] !== 0 && isSpace(text[i])) {
           i++;
         }
         if (text[i] !== CODEPOINTS["="]) {
           throw new Error(
-            `Expected equal sign in declaration of an attribute of the tag "${
-              decode(tagName)
-            }" at byte offset ${beginPos}`,
+            'Expected equal sign in declaration of an attribute of the tag "' + decode(tagName) + '" at byte offset ' +
+              beginPos,
           );
         }
         i++;
-        while (text[i] != 0 && isSpace(text[i])) {
+        while (text[i] !== 0 && isSpace(text[i])) {
           i++;
         }
-        if (text[i] == null || text[i] == 0) {
-          throw new Error(`Unclosed start tag "${decode(tagName)}" at byte offset ${beginPos}`);
+        if (text[i] == null || text[i] === 0) {
+          throw new Error('Unclosed start tag "' + decode(tagName) + '" at byte offset ' + beginPos);
         }
 
         let attributeValue: Uint8Array;
-        if (text[i] !== CODEPOINTS["'"] && text[i] !== CODEPOINTS['"']) {
+        if (text[i] != null && text[i] !== CODEPOINTS["'"] && text[i] !== CODEPOINTS['"']) {
           const tokenBeginPos = i;
           while (isAlNum(text[i]) || text[i] === CODEPOINTS["."] || text[i] === CODEPOINTS["-"]) {
             i++;
           }
           attributeValue = toLower(text.slice(tokenBeginPos, i));
-          if (!isSpace(text[i]) && text[i] !== CODEPOINTS[">"]) {
-            throw new Error(`Unexpected end of name token at byte offset ${tokenBeginPos}`);
+
+          if (text[i] != null && !isSpace(text[i]) && text[i] !== CODEPOINTS[">"]) {
+            throw new Error("Unexpected end of name token at byte offset " + tokenBeginPos);
           }
         } else {
           const endCharacter = text[i++];
           let attributeEnd = str[i];
           const attributeBegin = attributeEnd;
-          while (text[i] != null && text[i] !== endCharacter && text[i] !== 0) {
+          while (text[i] !== endCharacter && text[i] !== 0 && text[i] != null) {
             if (text[i] === CODEPOINTS["&"]) {
               const code = decodeHTMLEntity(str, i);
               if (code !== 0) {
@@ -2259,16 +2258,16 @@ export function parseHTML(str: Uint8Array) {
       }
 
       if (areTypedArraysEqual(tagName, "span") && !areTypedArraysEqual(argument, "spoiler")) {
-        throw new Error(`Tag "span" must have class "tg-spoiler" at byte offset ${beginPos}`);
+        throw new Error('Tag "span" must have class "tg-spoiler" at byte offset ' + beginPos);
       }
 
       nestedEntities.push({ tagName, argument, entityOffset: utf16Offset, entityBeginPos: resultEnd - resultBegin });
     } else {
       if (nestedEntities.length === 0) {
-        throw new Error(`Unexpected end tag at byte offset ${beginPos}`);
+        throw new Error("Unexpected end tag at byte offset " + beginPos);
       }
 
-      if (text[i] != null && !isSpace(text[i]) && text[i] !== CODEPOINTS[">"]) {
+      while (text[i] != null && !isSpace(text[i]) && text[i] !== CODEPOINTS[">"]) {
         i++;
       }
       const endTagName = toLower(text.slice(beginPos + 2, i));
@@ -2276,16 +2275,14 @@ export function parseHTML(str: Uint8Array) {
         i++;
       }
       if (text[i] !== CODEPOINTS[">"]) {
-        // TODO: This somehow gets executed. The value of `i` doesn't seem to be correct.
-        throw new Error(`Unclosed end tag at byte offset ${beginPos}`);
+        throw new Error("Unclosed end tag at byte offset " + beginPos);
       }
 
-      const tagName = nestedEntities[nestedEntities.length - 1].tagName;
+      const tagName = nestedEntities.at(-1)!.tagName;
       if (endTagName.length !== 0 && !areTypedArraysEqual(endTagName, tagName)) {
         throw new Error(
-          `Unmatched end tag at byte offset ${beginPos}, expected "</${decode(tagName)}>, found "</${
-            decode(endTagName)
-          }>`,
+          "Unmatched end tag at byte offset " + beginPos + ', expected "</' + decode(tagName) + '>", found "</' +
+            decode(endTagName) + '>"',
         );
       }
 
@@ -2309,7 +2306,8 @@ export function parseHTML(str: Uint8Array) {
         ) {
           entities.push({ type: "spoiler", offset: entityOffset, length: entityLength });
         } else if (areTypedArraysEqual(tagName, "tg-emoji")) {
-          const rDocumentId = BigInt(toInteger(nestedEntities.at(-1)!.argument));
+          const documentId = toInteger(nestedEntities.at(-1)!.argument);
+          const rDocumentId = BigInt(isNaN(documentId) ? 0 : documentId);
           if (rDocumentId === 0n) {
             throw new Error("Invalid custom emoji identifier specified");
           }
@@ -2336,9 +2334,9 @@ export function parseHTML(str: Uint8Array) {
         } else if (areTypedArraysEqual(tagName, "pre")) {
           const last = entities[entities.length - 1];
           if (
-            entities.length !== 0 && last.type === "code" && last.offset == entityOffset &&
-            last.length === entityLength && "argument" in last && isUint8Array(last.argument) &&
-            last.argument.length !== 0
+            entities.length !== 0 && last.type === "code" && last.offset === entityOffset &&
+            last.length === entityLength && "argument" in last && last.argument != null &&
+            (last.argument as Uint8Array).length !== 0
           ) {
             entities[entities.length - 1].type = "pre_code";
           } else {
@@ -2346,49 +2344,48 @@ export function parseHTML(str: Uint8Array) {
           }
         } else if (areTypedArraysEqual(tagName, "code")) {
           const last = entities[entities.length - 1];
+          const lastNested = nestedEntities[nestedEntities.length - 1];
           if (
-            entities.length != 0 && last.type === "pre" && last.offset == entityOffset && last.length == entityLength &&
-            nestedEntities.at(-1)!.argument.length != 0
+            entities.length !== 0 && last.type === "pre" && last.offset === entityOffset &&
+            last.length === entityLength && lastNested.argument.length !== 0
           ) {
             entities[entities.length - 1].type = "pre_code";
-            (entities[entities.length - 1] as MessageEntity.PreMessageEntity).language =
-              nestedEntities.at(-1)!.argument;
+            (entities[entities.length - 1] as MessageEntity.PreMessageEntity).language = lastNested.argument;
           } else {
             entities.push({
               type: "code",
               offset: entityOffset,
               length: entityLength,
-              // @ts-ignore it is how it is.
-              argument: nestedEntities.at(-1)!.argument,
+              // @ts-ignore This is how it is.
+              argument: nestedEntities.at(-1)?.argument,
             });
           }
         } else {
           unreachable();
         }
       }
+
       nestedEntities.pop();
     }
   }
-
-  if (nestedEntities.length != 0) {
-    throw new Error(`Can't find end tag corresponding to start tag ${decode(nestedEntities.at(-1)!.tagName)}`);
+  if (nestedEntities.length !== 0) {
+    throw new Error("Can't find end tag corresponding to start tag " + decode(nestedEntities.at(-1)!.tagName));
   }
 
   for (const entity of entities) {
-    if (entity.type === "code" && "argument" in entity) {
+    if (entity.type === "code" && "argument" in entity && (entity.argument as Uint8Array).length === 0) {
       delete entity.argument;
     }
   }
 
   entities = sortEntities(entities);
 
-  str = str.slice(0, resultEnd);
-
-  if (needRecheckUTF8 && !checkUTF8(str)) {
+  str = str.subarray(0, resultEnd);
+  if (needRecheckUtf8 && !checkUTF8(str)) {
     throw new Error(
-      "Text contains invalid Unicode characters after decoding HTML entities, check for unmatched surrogate code units",
+      "Text contains invalid Unicode characters after decoding HTML entities, check for unmatched " +
+        "surrogate code units",
     );
   }
-
   return { text: str, entities };
 }
