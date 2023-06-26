@@ -2,8 +2,7 @@
 
 # Parse Modes
 
-<sup>Synced with
-[tdlib/td:7c3822d932](https://github.com/tdlib/td/tree/7c3822d932f96aeca2861b6ae0cb25eacb27136f).</sup>
+<sup>Synced with [tdlib/td:7c3822d932](https://github.com/tdlib/td/tree/7c3822d932f96aeca2861b6ae0cb25eacb27136f).</sup>
 
 </div>
 
@@ -149,4 +148,5 @@ actually works.
 ```
 
 > \* Most likely too buggy.
+
 </details>
