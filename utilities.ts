@@ -19,9 +19,9 @@ export function CHECK(condition: boolean) {
   }
 }
 
-export function LOG_CHECK(condition: boolean, ...message: unknown[]) {
+export function LOG_CHECK(condition: boolean, ...messages: unknown[]) {
   if (!condition) {
-    console.trace("Check failed: ", ...message);
+    console.trace("Check failed: ", ...messages);
   }
 }
 
@@ -32,7 +32,7 @@ export function isWordCharacter(code: number) {
     case UnicodeSimpleCategory.Number:
       return true;
     default:
-      return code == CODEPOINTS["_"];
+      return code === CODEPOINTS["_"];
   }
 }
 
@@ -42,7 +42,7 @@ export function tolowerBeginsWith(str: Uint8Array, prefix: string | Uint8Array):
     return false;
   }
   for (let i = 0; i < prefix.length; i++) {
-    if (toLower(str[i]) != prefix[i]) {
+    if (toLower(str[i]) !== prefix[i]) {
       return false;
     }
   }
@@ -54,12 +54,12 @@ export function toLower(data: Uint8Array): Uint8Array;
 export function toLower(c: number | Uint8Array): Uint8Array | number {
   return typeof c === "number"
     ? (CODEPOINTS["A"] <= c && c <= CODEPOINTS["Z"]) ? c - CODEPOINTS["A"] + CODEPOINTS["a"] : c
-    : new Uint8Array(c.map((code) => toLower(code)));
+    : Uint8Array.from(c.map((code) => toLower(code)));
 }
 
 export function split(s: Uint8Array, delimiter: number = CODEPOINTS[" "]): Uint8Array[] {
   const delimiterPos = s.indexOf(delimiter);
-  if (delimiterPos == -1) {
+  if (delimiterPos === -1) {
     return [s];
   } else {
     return [s.slice(0, delimiterPos), s.slice(delimiterPos + 1)];
@@ -128,11 +128,11 @@ export function isAlphaOrDigit(codepoint: number): boolean {
 }
 
 export function isAlphaDigitOrUnderscore(codepoint: number): boolean {
-  return isAlphaOrDigit(codepoint) || codepoint == CODEPOINTS["_"];
+  return isAlphaOrDigit(codepoint) || codepoint === CODEPOINTS["_"];
 }
 
 export function isAlphaDigitUnderscoreOrMinus(codepoint: number): boolean {
-  return isAlphaOrDigit(codepoint) || codepoint == CODEPOINTS["_"] || codepoint == CODEPOINTS["-"];
+  return isAlphaOrDigit(codepoint) || codepoint === CODEPOINTS["_"] || codepoint === CODEPOINTS["-"];
 }
 
 export function isHexDigit(codepoint: number) {
@@ -152,8 +152,8 @@ export function hexToInt(codepoint: number) {
 
 export function isHashtagLetter(codepoint: number): boolean {
   if (
-    codepoint == CODEPOINTS["_"] || codepoint == 0x200c ||
-    codepoint == 0xb7 || (0xd80 <= codepoint && codepoint <= 0xdff)
+    codepoint === CODEPOINTS["_"] || codepoint === 0x200c ||
+    codepoint === 0xb7 || (0xd80 <= codepoint && codepoint <= 0xdff)
   ) {
     return true;
   }

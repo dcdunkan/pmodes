@@ -3,7 +3,7 @@ import { unicodeToLower } from "./unicode.ts";
 import { mergeTypedArrays } from "./encode.ts";
 
 export function isUTF8CharacterFirstCodeUnit(c: number): boolean {
-  return (c & 0xC0) != 0x80;
+  return (c & 0xC0) !== 0x80;
 }
 
 export function utf8Length(str: Uint8Array): number {
@@ -32,16 +32,16 @@ export function prevUtf8Unsafe(data: Uint8Array, pos: number): number {
 export function nextUtf8Unsafe(data: Uint8Array, pos: number): { code: number; pos: number } {
   let code = 0;
   const a = data[pos];
-  if ((a & 0x80) == 0) {
+  if ((a & 0x80) === 0) {
     code = a;
     return { pos: pos + 1, code };
-  } else if ((a & 0x20) == 0) {
+  } else if ((a & 0x20) === 0) {
     code = ((a & 0x1f) << 6) | (data[pos + 1] & 0x3f);
     return { pos: pos + 2, code };
-  } else if ((a & 0x10) == 0) {
+  } else if ((a & 0x10) === 0) {
     code = ((a & 0x0f) << 12) | ((data[pos + 1] & 0x3f) << 6) | (data[pos + 2] & 0x3f);
     return { pos: pos + 3, code };
-  } else if ((a & 0x08) == 0) {
+  } else if ((a & 0x08) === 0) {
     code = ((a & 0x07) << 18) | ((data[pos + 1] & 0x3f) << 12) | ((data[pos + 2] & 0x3f) << 6) | (data[pos + 3] & 0x3f);
     return { pos: pos + 4, code };
   }
@@ -93,7 +93,7 @@ export function utf8ToLower(str: Uint8Array): Uint8Array {
   let result = new Uint8Array();
   let position = 0;
   const end = str.length;
-  while (position != end) {
+  while (position !== end) {
     const { pos, code } = nextUtf8Unsafe(str, position);
     position = pos;
     result = appendUtf8Character(result, unicodeToLower(code));
@@ -136,8 +136,6 @@ export function utf8Substr(str: Uint8Array, offset: number): Uint8Array {
   return str.slice(offsetPos);
 }
 
-export function utf8utf16Substr(str: Uint8Array, offset: number): Uint8Array;
-export function utf8utf16Substr(str: Uint8Array, offset: number, length: number): Uint8Array;
 export function utf8utf16Substr(str: Uint8Array, offset: number, length?: number): Uint8Array {
   if (length != null) {
     return utf8utf16Truncate(utf8utf16Substr(str, offset), length);

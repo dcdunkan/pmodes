@@ -2,7 +2,7 @@ export class CustomEmojiId {
   constructor(public id = 0n) {}
 
   isValid() {
-    return this.id != 0n;
+    return this.id !== 0n;
   }
 
   toString() {

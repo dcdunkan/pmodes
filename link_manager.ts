@@ -43,7 +43,7 @@ export class LinkManager {
     }
     url = url.slice(1);
     const hashPos = url.indexOf(CODEPOINTS["#"]);
-    url = url.slice(0, hashPos == -1 ? undefined : hashPos);
+    url = url.slice(0, hashPos === -1 ? undefined : hashPos);
 
     for (const parameter of fullSplit(url, CODEPOINTS["&"])) {
       const [key, value] = split(parameter, CODEPOINTS["="]);
@@ -86,7 +86,7 @@ export class LinkManager {
     }
     url = url.slice(1);
     const hashPos = url.indexOf(CODEPOINTS["#"]);
-    url = url.slice(0, hashPos == -1 ? undefined : hashPos);
+    url = url.slice(0, hashPos === -1 ? undefined : hashPos);
 
     const splitx = fullSplit(url, CODEPOINTS["&"]);
     for (const parameter of splitx) {
@@ -124,7 +124,7 @@ export class LinkManager {
 
     const httpUrl = parseURL(link);
 
-    if (httpsOnly && (httpUrl.protocol != HttpUrlProtocol.Https || isTg || isTon)) {
+    if (httpsOnly && (httpUrl.protocol !== HttpUrlProtocol.Https || isTg || isTon)) {
       throw new Error("Only HTTP links are allowed");
     }
     if (isTg || isTon) {
@@ -132,8 +132,8 @@ export class LinkManager {
         throw new Error("Only HTTP links are allowed");
       }
       if (
-        tolowerBeginsWith(link, "http://") || httpUrl.protocol == HttpUrlProtocol.Https ||
-        httpUrl.userinfo.length != 0 || httpUrl.specifiedPort != 0 || httpUrl.isIpv6
+        tolowerBeginsWith(link, "http://") || httpUrl.protocol === HttpUrlProtocol.Https ||
+        httpUrl.userinfo.length !== 0 || httpUrl.specifiedPort !== 0 || httpUrl.isIpv6
       ) {
         throw new Error(`Wrong ${isTg ? "tg" : "ton"} URL`);
       }
@@ -152,7 +152,7 @@ export class LinkManager {
       return mergeTypedArrays(encode(isTg ? "tg" : "ton"), encode("://"), httpUrl.host, query);
     }
 
-    if (httpUrl.host.indexOf(CODEPOINTS["."]) == -1 && !httpUrl.isIpv6) {
+    if (httpUrl.host.indexOf(CODEPOINTS["."]) === -1 && !httpUrl.isIpv6) {
       throw new Error("Wrong HTTP URL");
     }
     return httpUrl.getUrl();

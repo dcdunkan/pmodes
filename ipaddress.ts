@@ -73,7 +73,7 @@ export function parseIpv6(input: Uint8Array) {
         while (isDigit(input[pointer])) {
           number = parseInt(decode(input[pointer]), 10);
           if (ipv4Piece === null) ipv4Piece = number;
-          else if (ipv4Piece == 0) return;
+          else if (ipv4Piece === 0) return;
           else ipv4Piece = ipv4Piece * 10 + number;
           if (ipv4Piece > 255) return;
           pointer++;

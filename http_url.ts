@@ -63,7 +63,7 @@ export class HttpUrl {
 function firstIndexOf(str: Uint8Array, toFind: Uint8Array): number | undefined {
   for (const char of toFind) {
     const index = str.indexOf(char);
-    if (index != -1) return index;
+    if (index !== -1) return index;
   }
 }
 
@@ -146,10 +146,10 @@ export function parseURL(
 
   const specifiedPort = port;
   if (port === 0) {
-    if (protocol == HttpUrlProtocol.Http) {
+    if (protocol === HttpUrlProtocol.Http) {
       port = 80;
     } else {
-      CHECK(protocol == HttpUrlProtocol.Https);
+      CHECK(protocol === HttpUrlProtocol.Https);
       port = 443;
     }
   }

@@ -52,10 +52,10 @@ export function matchMentions(str: Uint8Array): Position[] {
 
   while (true) {
     const atSymbol = str.slice(position).indexOf(CODEPOINTS["@"]);
-    if (atSymbol == -1) break;
+    if (atSymbol === -1) break;
     position += atSymbol;
 
-    if (position != begin) {
+    if (position !== begin) {
       const prevPos = prevUtf8Unsafe(str, position);
       const { code: prev } = nextUtf8Unsafe(str, prevPos);
 
@@ -65,7 +65,7 @@ export function matchMentions(str: Uint8Array): Position[] {
       }
     }
     const mentionBegin = ++position;
-    while (position != end && isAlphaDigitOrUnderscore(str[position])) {
+    while (position !== end && isAlphaDigitOrUnderscore(str[position])) {
       position++;
     }
     const mentionEnd = position;
@@ -74,7 +74,7 @@ export function matchMentions(str: Uint8Array): Position[] {
       continue;
     }
     let next = 0;
-    if (position != end) {
+    if (position !== end) {
       const { code } = nextUtf8Unsafe(str, position);
       next = code;
     }
@@ -94,10 +94,10 @@ export function matchBotCommands(str: Uint8Array): Position[] {
 
   while (true) {
     const slashSymbol = str.slice(position).indexOf(CODEPOINTS["/"]);
-    if (slashSymbol == -1) break;
+    if (slashSymbol === -1) break;
     position += slashSymbol;
 
-    if (position != begin) {
+    if (position !== begin) {
       const prevPos = prevUtf8Unsafe(str, position);
       const { code: prev } = nextUtf8Unsafe(str, prevPos);
 
@@ -111,16 +111,16 @@ export function matchBotCommands(str: Uint8Array): Position[] {
     }
 
     const commandBegin = ++position;
-    while (position != end && isAlphaDigitOrUnderscore(str[position])) {
+    while (position !== end && isAlphaDigitOrUnderscore(str[position])) {
       position++;
     }
     let commandEnd = position;
     const commandSize = commandEnd - commandBegin;
     if (commandSize < 1 || commandSize > 64) continue;
 
-    if (position != end && str[position] === CODEPOINTS["@"]) {
+    if (position !== end && str[position] === CODEPOINTS["@"]) {
       const mentionBegin = ++position;
-      while (position != end && isAlphaDigitOrUnderscore(str[position])) {
+      while (position !== end && isAlphaDigitOrUnderscore(str[position])) {
         position++;
       }
       const mentionEnd = position;
@@ -132,7 +132,7 @@ export function matchBotCommands(str: Uint8Array): Position[] {
     }
 
     let next = 0;
-    if (position != end) {
+    if (position !== end) {
       const { code } = nextUtf8Unsafe(str, position);
       next = code;
     }
@@ -158,10 +158,10 @@ export function matchHashtags(str: Uint8Array): Position[] {
 
   while (true) {
     const hashSymbol = str.slice(position).indexOf(CODEPOINTS["#"]);
-    if (hashSymbol == -1) break;
+    if (hashSymbol === -1) break;
     position += hashSymbol;
 
-    if (position != begin) {
+    if (position !== begin) {
       const prevPos = prevUtf8Unsafe(str, position);
       const { code: prev } = nextUtf8Unsafe(str, prevPos);
       category = getUnicodeSimpleCategory(prev);
@@ -175,22 +175,22 @@ export function matchHashtags(str: Uint8Array): Position[] {
     let hashtagSize = 0, hashtagEnd: number | undefined = undefined;
     let wasLetter = false;
 
-    while (position != end) {
+    while (position !== end) {
       const { code, pos } = nextUtf8Unsafe(str, position);
       category = getUnicodeSimpleCategory(code);
       if (!isHashtagLetter(code)) break;
       position = pos;
 
-      if (hashtagSize == 255) hashtagEnd = position;
-      if (hashtagSize != 256) {
-        wasLetter ||= category == UnicodeSimpleCategory.Letter;
+      if (hashtagSize === 255) hashtagEnd = position;
+      if (hashtagSize !== 256) {
+        wasLetter ||= category === UnicodeSimpleCategory.Letter;
         hashtagSize++;
       }
     }
 
     if (hashtagEnd == null) hashtagEnd = position;
     if (hashtagSize < 1) continue;
-    if (position != end && str[position] == CODEPOINTS["#"]) continue;
+    if (position !== end && str[position] === CODEPOINTS["#"]) continue;
     if (!wasLetter) continue;
     result.push([hashtagBegin - 1, hashtagEnd]);
   }
@@ -205,10 +205,10 @@ export function matchCashtags(str: Uint8Array): Position[] {
 
   while (true) {
     const dollarSymbol = str.slice(position).indexOf(CODEPOINTS["$"]);
-    if (dollarSymbol == -1) break;
+    if (dollarSymbol === -1) break;
     position += dollarSymbol;
 
-    if (position != begin) {
+    if (position !== begin) {
       const prevPosition = prevUtf8Unsafe(str, position);
       const { code: prev } = nextUtf8Unsafe(str, prevPosition);
 
@@ -219,10 +219,10 @@ export function matchCashtags(str: Uint8Array): Position[] {
     }
 
     const cashtagBegin = ++position;
-    if ((end - position) >= 5 && areTypedArraysEqual(str.slice(position, position + 5), encode("1INCH"))) {
+    if ((end - position) >= 5 && areTypedArraysEqual(str.slice(position, position + 5), "1INCH")) {
       position += 5;
     } else {
-      while (position != end && CODEPOINTS["Z"] >= str[position] && str[position] >= CODEPOINTS["A"]) {
+      while (position !== end && CODEPOINTS["Z"] >= str[position] && str[position] >= CODEPOINTS["A"]) {
         position++;
       }
     }
@@ -232,7 +232,7 @@ export function matchCashtags(str: Uint8Array): Position[] {
       continue;
     }
 
-    if (cashtagEnd != end) {
+    if (cashtagEnd !== end) {
       const { code } = nextUtf8Unsafe(str, position);
       if (isHashtagLetter(code) || code === CODEPOINTS["$"]) {
         continue;
@@ -251,29 +251,29 @@ export function matchMediaTimestamps(str: Uint8Array): Position[] {
 
   while (true) {
     const colonSign = str.slice(position).indexOf(CODEPOINTS[":"]);
-    if (colonSign == -1) break;
+    if (colonSign === -1) break;
     position += colonSign;
 
     let mediaTimestampBegin = position;
     while (
-      mediaTimestampBegin != begin &&
-      (str[mediaTimestampBegin - 1] == CODEPOINTS[":"] || isDigit(str[mediaTimestampBegin - 1]))
+      mediaTimestampBegin !== begin &&
+      (str[mediaTimestampBegin - 1] === CODEPOINTS[":"] || isDigit(str[mediaTimestampBegin - 1]))
     ) {
       mediaTimestampBegin--;
     }
     let mediaTimestampEnd = position;
     while (
-      mediaTimestampEnd + 1 != end &&
-      (str[mediaTimestampEnd + 1] == CODEPOINTS[":"] || isDigit(str[mediaTimestampEnd + 1]))
+      mediaTimestampEnd + 1 !== end &&
+      (str[mediaTimestampEnd + 1] === CODEPOINTS[":"] || isDigit(str[mediaTimestampEnd + 1]))
     ) {
       mediaTimestampEnd++;
     }
     mediaTimestampEnd++;
 
-    if (mediaTimestampEnd != position && mediaTimestampEnd != (position + 1) && isDigit(str[position + 1])) {
+    if (mediaTimestampEnd !== position && mediaTimestampEnd !== (position + 1) && isDigit(str[position + 1])) {
       position = mediaTimestampEnd;
 
-      if (mediaTimestampBegin != begin) {
+      if (mediaTimestampBegin !== begin) {
         const prevPosition = prevUtf8Unsafe(str, mediaTimestampBegin);
         const { code: prev } = nextUtf8Unsafe(str, prevPosition);
 
@@ -281,7 +281,7 @@ export function matchMediaTimestamps(str: Uint8Array): Position[] {
           continue;
         }
       }
-      if (mediaTimestampEnd != end) {
+      if (mediaTimestampEnd !== end) {
         const { code: next } = nextUtf8Unsafe(str, mediaTimestampEnd);
 
         if (isWordCharacter(next)) {
@@ -303,24 +303,24 @@ export function matchBankCardNumbers(str: Uint8Array): Position[] {
   let position = begin;
 
   while (true) {
-    while (position != end && !isDigit(str[position])) {
+    while (position !== end && !isDigit(str[position])) {
       position++;
     }
-    if (position == end) {
+    if (position === end) {
       break;
     }
-    if (position != begin) {
+    if (position !== begin) {
       const prevPosition = prevUtf8Unsafe(str, position);
       const { code: prev } = nextUtf8Unsafe(str, prevPosition);
 
       if (
-        prev == CODEPOINTS["."] || prev == CODEPOINTS[","] || prev == CODEPOINTS["+"] ||
-        prev == CODEPOINTS["-"] || prev == CODEPOINTS["_"] ||
-        getUnicodeSimpleCategory(prev) == UnicodeSimpleCategory.Letter
+        prev === CODEPOINTS["."] || prev === CODEPOINTS[","] || prev === CODEPOINTS["+"] ||
+        prev === CODEPOINTS["-"] || prev === CODEPOINTS["_"] ||
+        getUnicodeSimpleCategory(prev) === UnicodeSimpleCategory.Letter
       ) {
         while (
-          position != end &&
-          (isDigit(str[position]) || str[position] == CODEPOINTS[" "] || str[position] == CODEPOINTS["-"])
+          position !== end &&
+          (isDigit(str[position]) || str[position] === CODEPOINTS[" "] || str[position] === CODEPOINTS["-"])
         ) {
           position++;
         }
@@ -331,12 +331,12 @@ export function matchBankCardNumbers(str: Uint8Array): Position[] {
     const cardNumberBegin = position;
     let digitCount = 0;
     while (
-      position != end &&
-      (isDigit(str[position]) || str[position] == CODEPOINTS[" "] || str[position] == CODEPOINTS["-"])
+      position !== end &&
+      (isDigit(str[position]) || str[position] === CODEPOINTS[" "] || str[position] === CODEPOINTS["-"])
     ) {
       if (
-        str[position] == CODEPOINTS[" "] && digitCount >= 16 && digitCount <= 19 &&
-        digitCount == (position - cardNumberBegin)
+        str[position] === CODEPOINTS[" "] && digitCount >= 16 && digitCount <= 19 &&
+        digitCount === (position - cardNumberBegin)
       ) break;
       digitCount += isDigit(str[position]) ? 1 : 0;
       position++;
@@ -353,11 +353,11 @@ export function matchBankCardNumbers(str: Uint8Array): Position[] {
     if (cardNumberSize > 2 * digitCount - 1) {
       continue;
     }
-    if (cardNumberEnd != end) {
+    if (cardNumberEnd !== end) {
       const { code: next } = nextUtf8Unsafe(str, cardNumberEnd);
       if (
-        next == CODEPOINTS["-"] || next == CODEPOINTS["_"] ||
-        getUnicodeSimpleCategory(next) == UnicodeSimpleCategory.Letter
+        next === CODEPOINTS["-"] || next === CODEPOINTS["_"] ||
+        getUnicodeSimpleCategory(next) === UnicodeSimpleCategory.Letter
       ) continue;
     }
 
@@ -369,8 +369,8 @@ export function matchBankCardNumbers(str: Uint8Array): Position[] {
 
 export function isURLUnicodeSymbol(codepoint: number): boolean {
   return 0x2000 <= codepoint && codepoint <= 0x206f
-    ? codepoint == 0x200c || codepoint == 0x200d || (0x2010 <= codepoint && codepoint <= 0x2015)
-    : getUnicodeSimpleCategory(codepoint) != UnicodeSimpleCategory.Separator;
+    ? codepoint === 0x200c || codepoint === 0x200d || (0x2010 <= codepoint && codepoint <= 0x2015)
+    : getUnicodeSimpleCategory(codepoint) !== UnicodeSimpleCategory.Separator;
 }
 
 export function isURLPathSymbol(codepoint: number): boolean {
@@ -398,14 +398,14 @@ export function matchTgURLs(str: Uint8Array): Position[] {
 
   while (end - position > 5) {
     const colonSymbol = str.slice(position).indexOf(CODEPOINTS[":"]);
-    if (colonSymbol == -1) break;
+    if (colonSymbol === -1) break;
     position += colonSymbol;
 
     let urlBegin: number | undefined = undefined;
-    if (end - position >= 3 && str[position + 1] == CODEPOINTS["/"] && str[position + 2] == CODEPOINTS["/"]) {
+    if (end - position >= 3 && str[position + 1] === CODEPOINTS["/"] && str[position + 2] === CODEPOINTS["/"]) {
       if (
-        position - begin >= 2 && toLower(str[position - 2]) == CODEPOINTS["t"] &&
-        toLower(str[position - 1]) == CODEPOINTS["g"]
+        position - begin >= 2 && toLower(str[position - 2]) === CODEPOINTS["t"] &&
+        toLower(str[position - 1]) === CODEPOINTS["g"]
       ) {
         urlBegin = position - 2;
       } else if (
@@ -422,19 +422,19 @@ export function matchTgURLs(str: Uint8Array): Position[] {
 
     position += 3;
     const domainBegin = position;
-    while (position != end && position - domainBegin != 253 && isAlphaDigitUnderscoreOrMinus(str[position])) {
+    while (position !== end && position - domainBegin !== 253 && isAlphaDigitUnderscoreOrMinus(str[position])) {
       position++;
     }
-    if (position == domainBegin) {
+    if (position === domainBegin) {
       continue;
     }
 
     if (
-      position != end &&
-      (str[position] == CODEPOINTS["/"] || str[position] == CODEPOINTS["?"] || str[position] == CODEPOINTS["#"])
+      position !== end &&
+      (str[position] === CODEPOINTS["/"] || str[position] === CODEPOINTS["?"] || str[position] === CODEPOINTS["#"])
     ) {
       let pathEndPos = position + 1;
-      while (pathEndPos != end) {
+      while (pathEndPos !== end) {
         const { code, pos: nextPosition } = nextUtf8Unsafe(str, pathEndPos);
         if (!isURLPathSymbol(code)) {
           break;
@@ -445,7 +445,7 @@ export function matchTgURLs(str: Uint8Array): Position[] {
         pathEndPos > position + 1 &&
         badPathEndChars.includes(str[pathEndPos - 1])
       ) pathEndPos--;
-      if (str[position] == CODEPOINTS["/"] || pathEndPos > position + 1) {
+      if (str[position] === CODEPOINTS["/"] || pathEndPos > position + 1) {
         position = pathEndPos;
       }
     }
@@ -458,8 +458,8 @@ export function matchTgURLs(str: Uint8Array): Position[] {
 
 export function isProtocolSymbol(codepoint: number): boolean {
   return codepoint < 0x80
-    ? isAlphaOrDigit(codepoint) || codepoint == CODEPOINTS["+"] || codepoint == CODEPOINTS["-"]
-    : getUnicodeSimpleCategory(codepoint) != UnicodeSimpleCategory.Separator;
+    ? isAlphaOrDigit(codepoint) || codepoint === CODEPOINTS["+"] || codepoint === CODEPOINTS["-"]
+    : getUnicodeSimpleCategory(codepoint) !== UnicodeSimpleCategory.Separator;
 }
 
 export function isUserDataSymbol(codepoint: number): boolean {
@@ -488,7 +488,7 @@ export function isUserDataSymbol(codepoint: number): boolean {
 
 export function isDomainSymbol(codepoint: number): boolean {
   return codepoint < 0xc0
-    ? codepoint == CODEPOINTS["."] || isAlphaDigitUnderscoreOrMinus(codepoint) || codepoint == CODEPOINTS["~"]
+    ? codepoint === CODEPOINTS["."] || isAlphaDigitUnderscoreOrMinus(codepoint) || codepoint === CODEPOINTS["~"]
     : isURLUnicodeSymbol(codepoint);
 }
 
@@ -626,13 +626,13 @@ export function matchURLs(str: Uint8Array): Position[] {
           }
         }
         const protocol = toLower(str.slice(protocolBeginPos, urlBeginPos - 3));
-        if (endsWith(protocol, encode("http")) && !areTypedArraysEqual(protocol, encode("shttp"))) {
+        if (endsWith(protocol, "http") && !areTypedArraysEqual(protocol, "shttp")) {
           urlBeginPos = urlBeginPos - 7;
-        } else if (endsWith(protocol, encode("https"))) {
+        } else if (endsWith(protocol, "https")) {
           urlBeginPos = urlBeginPos - 8;
         } else if (
-          endsWith(protocol, encode("ftp")) && !areTypedArraysEqual(protocol, encode("tftp")) &&
-          !areTypedArraysEqual(protocol, encode("sftp"))
+          endsWith(protocol, "ftp") && !areTypedArraysEqual(protocol, "tftp") &&
+          !areTypedArraysEqual(protocol, "sftp")
         ) {
           urlBeginPos = urlBeginPos - 6;
         } else {
@@ -690,41 +690,41 @@ export function isValidBankCard(str: Uint8Array): boolean {
   let sum = 0;
   for (let i = digitCount; i > 0; i--) {
     const digit = digits[i - 1] - CODEPOINTS["0"];
-    if ((digitCount - i) % 2 == 0) sum += digit;
+    if ((digitCount - i) % 2 === 0) sum += digit;
     else sum += digit < 5 ? 2 * digit : 2 * digit - 9;
   }
-  if (sum % 10 != 0) return false;
+  if (sum % 10 !== 0) return false;
 
   const prefix1 = digits[0] - CODEPOINTS["0"];
   const prefix2 = prefix1 * 10 + (digits[1] - CODEPOINTS["0"]);
   const prefix3 = prefix2 * 10 + (digits[2] - CODEPOINTS["0"]);
   const prefix4 = prefix3 * 10 + (digits[3] - CODEPOINTS["0"]);
-  if (prefix1 == 4) {
+  if (prefix1 === 4) {
     // Visa
-    return digitCount == 13 || digitCount == 16 || digitCount == 18 || digitCount == 19;
+    return digitCount === 13 || digitCount === 16 || digitCount === 18 || digitCount === 19;
   }
   if ((51 <= prefix2 && prefix2 <= 55) || (2221 <= prefix4 && prefix4 <= 2720)) {
     // mastercard
-    return digitCount == 16;
+    return digitCount === 16;
   }
-  if (prefix2 == 34 || prefix2 == 37) {
+  if (prefix2 === 34 || prefix2 === 37) {
     // American Express
-    return digitCount == 15;
+    return digitCount === 15;
   }
-  if (prefix2 == 62 || prefix2 == 81) {
+  if (prefix2 === 62 || prefix2 === 81) {
     // UnionPay
     return digitCount >= 16;
   }
   if (2200 <= prefix4 && prefix4 <= 2204) {
     // MIR
-    return digitCount == 16;
+    return digitCount === 16;
   }
   return true;
 }
 
 export function isEmailAddress(str: Uint8Array): boolean {
   const [userdata, domain] = split(str, CODEPOINTS["@"]);
-  if (!domain || domain.length == 0) return false;
+  if (!domain || domain.length === 0) return false;
 
   let prev = 0;
   let userdataPartCount = 0;
@@ -744,7 +744,7 @@ export function isEmailAddress(str: Uint8Array): boolean {
     return false;
   }
   const lastPartLength = userdata.length - prev;
-  if (lastPartLength == 0 || lastPartLength >= 36) {
+  if (lastPartLength === 0 || lastPartLength >= 36) {
     return false;
   }
 
@@ -761,7 +761,7 @@ export function isEmailAddress(str: Uint8Array): boolean {
   }
   domainParts.pop();
   for (const part of domainParts) {
-    if (part.length == 0 || part.length >= 31) return false;
+    if (part.length === 0 || part.length >= 31) return false;
     for (const c of part) {
       if (!isAlphaDigitUnderscoreOrMinus(c)) return false;
     }
@@ -928,10 +928,7 @@ export function fixURL(str: Uint8Array): Uint8Array {
 
   let hasProtocol = false;
   const strBegin = toLower(str.slice(0, 9));
-  if (
-    beginsWith(strBegin, encode("http://")) || beginsWith(strBegin, encode("https://")) ||
-    beginsWith(strBegin, encode("ftp://"))
-  ) {
+  if (beginsWith(strBegin, "http://") || beginsWith(strBegin, "https://") || beginsWith(strBegin, "ftp://")) {
     const pos = str.indexOf(CODEPOINTS[":"]);
     str = str.slice(pos + 3);
     hasProtocol = true;
@@ -1000,7 +997,7 @@ export function fixURL(str: Uint8Array): Uint8Array {
   let hasNonDigit = false;
   let isIpv4 = true;
   for (let i = 0; i <= domain.length; i++) {
-    if (i == domain.length || domain[i] === CODEPOINTS["."]) {
+    if (i === domain.length || domain[i] === CODEPOINTS["."]) {
       const partSize = i - prev;
       if (partSize === 0 || partSize >= 64 || domain[i - 1] === CODEPOINTS["-"]) return new Uint8Array();
       if (isIpv4) {
@@ -1018,7 +1015,7 @@ export function fixURL(str: Uint8Array): Uint8Array {
       }
 
       domainPartCount++;
-      if (i != domain.length) prev = i + 1;
+      if (i !== domain.length) prev = i + 1;
     } else if (!isDigit(domain[i])) {
       isIpv4 = false;
       hasNonDigit = true;
@@ -1026,20 +1023,20 @@ export function fixURL(str: Uint8Array): Uint8Array {
   }
 
   if (domainPartCount === 1) return new Uint8Array();
-  if (isIpv4 && domainPartCount == 4) return fullUrl;
+  if (isIpv4 && domainPartCount === 4) return fullUrl;
   if (!hasNonDigit) return new Uint8Array();
 
   const tld = domain.slice(prev);
   if (utf8Length(tld) <= 1) return new Uint8Array();
 
-  if (beginsWith(tld, encode("xn--"))) {
+  if (beginsWith(tld, "xn--")) {
     if (tld.length <= 5) return new Uint8Array();
     for (const c of tld.slice(4)) {
       if (!isAlphaOrDigit(c)) return new Uint8Array();
     }
   } else {
-    if (tld.indexOf(CODEPOINTS["_"]) != -1) return new Uint8Array();
-    if (tld.indexOf(CODEPOINTS["-"]) != -1) return new Uint8Array();
+    if (tld.indexOf(CODEPOINTS["_"]) !== -1) return new Uint8Array();
+    if (tld.indexOf(CODEPOINTS["-"]) !== -1) return new Uint8Array();
     if (!hasProtocol && !isCommonTLD(tld)) return new Uint8Array();
   }
 
@@ -1100,11 +1097,11 @@ export function findURLs(str: Uint8Array): [Position, boolean][] {
     let url = str.slice(start, end);
     if (isEmailAddress(url)) {
       result.push([[start, end], true]);
-    } else if (beginsWith(url, encode("mailto:")) && isEmailAddress(url.slice(7))) {
+    } else if (beginsWith(url, "mailto:") && isEmailAddress(url.slice(7))) {
       result.push([[start + 7, start + url.length], true]);
     } else {
       url = fixURL(url);
-      if (url.length != 0) {
+      if (url.length !== 0) {
         result.push([[start, start + url.length], false]);
       }
     }
@@ -1117,15 +1114,15 @@ export function findMediaTimestamps(str: Uint8Array): [Position, number][] {
   for (const [start, end] of matchMediaTimestamps(str)) {
     const parts = fullSplit(str.slice(start, end), CODEPOINTS[":"]);
     CHECK(parts.length >= 2);
-    if (parts.length > 3 || parts[parts.length - 1].length != 2) {
+    if (parts.length > 3 || parts[parts.length - 1].length !== 2) {
       continue;
     }
     const seconds = toInteger(parts[parts.length - 1]);
     if (seconds >= 60) {
       continue;
     }
-    if (parts.length == 2) {
-      if (parts[0].length > 4 || parts[0].length == 0) {
+    if (parts.length === 2) {
+      if (parts[0].length > 4 || parts[0].length === 0) {
         continue;
       }
       const minutes = toInteger(parts[0]);
@@ -1134,7 +1131,7 @@ export function findMediaTimestamps(str: Uint8Array): [Position, number][] {
     } else {
       if (
         parts[0].length > 2 || parts[1].length > 2 ||
-        parts[0].length == 0 || parts[1].length == 0
+        parts[0].length === 0 || parts[1].length === 0
       ) continue;
       const minutes = toInteger(parts[1]);
       if (minutes >= 60) {
@@ -1183,7 +1180,7 @@ export function removeEmptyEntities(entities: MessageEntity[]): MessageEntity[] 
     if (entity.length <= 0) return false;
     switch (entity.type) {
       case "text_link":
-        return entity.url.length != 0;
+        return entity.url.length !== 0;
       case "text_mention":
         return entity.user_id.isValid();
       case "custom_emoji":
@@ -1196,10 +1193,10 @@ export function removeEmptyEntities(entities: MessageEntity[]): MessageEntity[] 
 
 export function sortEntities(entities: MessageEntity[]) {
   return entities.sort(({ offset, type, length }, other) => {
-    if (offset != other.offset) {
+    if (offset !== other.offset) {
       return offset < other.offset ? -1 : 1;
     }
-    if (length != other.length) {
+    if (length !== other.length) {
       return length > other.length ? -1 : 1;
     }
     const priority = getTypePriority(convertEntityTypeStringToEnum(type));
@@ -1265,30 +1262,30 @@ export function getUserEntitiesMask() {
 }
 
 export function isSplittableEntity(type: MessageEntityType) {
-  return (getEntityTypeMask(type) & getSplittableEntitiesMask()) != 0;
+  return (getEntityTypeMask(type) & getSplittableEntitiesMask()) !== 0;
 }
 
 export function isBlockquoteEntity(type: MessageEntityType) {
-  return type == MessageEntityType.Blockquote;
+  return type === MessageEntityType.Blockquote;
 }
 
 export function isContinuousEntity(type: MessageEntityType) {
-  return (getEntityTypeMask(type) & getContinuousEntitiesMask()) != 0;
+  return (getEntityTypeMask(type) & getContinuousEntitiesMask()) !== 0;
 }
 
 export function isPreEntity(type: MessageEntityType) {
-  return (getEntityTypeMask(type) & getPreEntitiesMask()) != 0;
+  return (getEntityTypeMask(type) & getPreEntitiesMask()) !== 0;
 }
 
 export function isUserEntity(type: MessageEntityType) {
-  return (getEntityTypeMask(type) & getUserEntitiesMask()) != 0;
+  return (getEntityTypeMask(type) & getUserEntitiesMask()) !== 0;
 }
 
 export function isHiddenDataEntity(type: MessageEntityType) {
   return (getEntityTypeMask(type) &
     (getEntityTypeMask(MessageEntityType.TextUrl) |
       getEntityTypeMask(MessageEntityType.MentionName) |
-      getPreEntitiesMask())) != 0;
+      getPreEntitiesMask())) !== 0;
 }
 
 export const SPLITTABLE_ENTITY_TYPE_COUNT = 5;
@@ -1299,13 +1296,13 @@ export function getSplittableEntityTypeIndex(type: MessageEntityType) {
   } else if (type <= MessageEntityType.Underline + 1) { // underline or strikthrough
     return type - MessageEntityType.Underline + 2;
   } else {
-    CHECK(type == MessageEntityType.Spoiler);
+    CHECK(type === MessageEntityType.Spoiler);
     return 4;
   }
 }
 
 export function areEntitiesValid(entities: MessageEntity[]): boolean {
-  if (entities.length == 0) return true;
+  if (entities.length === 0) return true;
   checkIsSorted(entities); // has to be?
   const endPos = new Array<number>(SPLITTABLE_ENTITY_TYPE_COUNT).fill(-1);
   const nestedEntitiesStack: MessageEntity[] = [];
@@ -1315,29 +1312,26 @@ export function areEntitiesValid(entities: MessageEntity[]): boolean {
     const entityType = convertEntityTypeStringToEnum(entity.type);
 
     while (
-      nestedEntitiesStack.length != 0 &&
+      nestedEntitiesStack.length !== 0 &&
       entity.offset >=
         (nestedEntitiesStack[nestedEntitiesStack.length - 1].offset +
           nestedEntitiesStack[nestedEntitiesStack.length - 1].length)
     ) {
       const last = nestedEntitiesStack[nestedEntitiesStack.length - 1];
-      nestedEntityTypeMask -= getEntityTypeMask(
-        convertEntityTypeStringToEnum(last.type),
-      );
+      nestedEntityTypeMask -= getEntityTypeMask(convertEntityTypeStringToEnum(last.type));
       nestedEntitiesStack.pop();
     }
 
-    if (nestedEntitiesStack.length != 0) {
+    if (nestedEntitiesStack.length !== 0) {
       if (
         entity.offset + entity.length >
           nestedEntitiesStack[nestedEntitiesStack.length - 1].offset +
             nestedEntitiesStack[nestedEntitiesStack.length - 1].length
       ) return false;
 
-      if (
-        (nestedEntityTypeMask &
-          getEntityTypeMask(convertEntityTypeStringToEnum(entity.type))) != 0
-      ) return false;
+      if ((nestedEntityTypeMask & getEntityTypeMask(convertEntityTypeStringToEnum(entity.type))) !== 0) {
+        return false;
+      }
 
       const parent = nestedEntitiesStack[nestedEntitiesStack.length - 1];
       const parentType = convertEntityTypeStringToEnum(parent.type);
@@ -1347,15 +1341,15 @@ export function areEntitiesValid(entities: MessageEntity[]): boolean {
       }
       if (
         isPreEntity(entityType) &&
-        (nestedEntityTypeMask & ~getBlockquoteEntitesMask()) != 0
+        (nestedEntityTypeMask & ~getBlockquoteEntitesMask()) !== 0
       ) return false;
 
       if (
         (isContinuousEntity(entityType) || isBlockquoteEntity(entityType)) &&
-        (nestedEntityTypeMask & getContinuousEntitiesMask()) != 0
+        (nestedEntityTypeMask & getContinuousEntitiesMask()) !== 0
       ) return false;
 
-      if ((nestedEntityTypeMask & getSplittableEntitiesMask()) != 0) {
+      if ((nestedEntityTypeMask & getSplittableEntitiesMask()) !== 0) {
         return false;
       }
     }
@@ -1383,7 +1377,7 @@ export function removeIntersectingEntities(
     CHECK(entities[i].length > 0);
     if (entities[i].offset >= lastEntityEnd) {
       lastEntityEnd = entities[i].offset + entities[i].length;
-      if (i != leftEntities) {
+      if (i !== leftEntities) {
         const removed = entities.splice(i, 1);
         entities[leftEntities] = removed[0];
       }
@@ -1400,14 +1394,14 @@ export function removeEntitiesIntersectingBlockquote(
 ): MessageEntity[] | undefined {
   checkNonIntersecting(entities);
   checkNonIntersecting(blockquoteEntities);
-  if (blockquoteEntities.length == 0) return;
+  if (blockquoteEntities.length === 0) return;
 
   let blockquoteIt = 0;
   let leftEntities = 0;
   for (let i = 0; i < entities.length; i++) {
     while (
-      blockquoteIt != blockquoteEntities.length &&
-      (convertEntityTypeStringToEnum(blockquoteEntities[blockquoteIt].type) !=
+      blockquoteIt !== blockquoteEntities.length &&
+      (convertEntityTypeStringToEnum(blockquoteEntities[blockquoteIt].type) !==
           MessageEntityType.Blockquote ||
         blockquoteEntities[blockquoteIt].offset +
               blockquoteEntities[blockquoteIt].length <= entities[i].offset)
@@ -1416,7 +1410,7 @@ export function removeEntitiesIntersectingBlockquote(
     }
     const blockquote = blockquoteEntities[blockquoteIt];
     if (
-      blockquoteIt != blockquoteEntities.length &&
+      blockquoteIt !== blockquoteEntities.length &&
       (blockquote.offset + blockquote.length <
           entities[i].offset + entities[i].length ||
         (entities[i].offset < blockquote.offset &&
@@ -1424,7 +1418,7 @@ export function removeEntitiesIntersectingBlockquote(
     ) {
       continue;
     }
-    if (i != leftEntities) {
+    if (i !== leftEntities) {
       const removed = entities.splice(i, 1);
       entities[leftEntities] = removed[0];
     }
@@ -1436,7 +1430,7 @@ export function removeEntitiesIntersectingBlockquote(
 }
 
 export function fixEntityOffsets(text: Uint8Array, entities: MessageEntity[]): MessageEntity[] | undefined {
-  if (entities.length == 0) return;
+  if (entities.length === 0) return;
   entities = sortEntities(entities);
   entities = removeIntersectingEntities(entities);
 
@@ -1450,28 +1444,26 @@ export function fixEntityOffsets(text: Uint8Array, entities: MessageEntity[]): M
     const entityEnd = entity.offset - entity.length;
 
     let pos = (ptr - begin) | 0;
-    if (entityBegin == pos) {
+    if (entityBegin === pos) {
       cnt--;
       entity.offset = utf16Pos;
     }
 
-    // let skippedCode = 0;
-    while (ptr != end && cnt > 0) {
+    while (ptr !== end && cnt > 0) {
       const c = text[ptr];
       utf16Pos += 1 + (c >= 0xf0 ? 1 : 0);
-      // skippedCode = text.codePointAt(ptr)!;
       ptr++;
 
       pos = (ptr - begin) | 0;
-      if (entityBegin == pos) {
+      if (entityBegin === pos) {
         cnt--;
         entity.offset = utf16Pos;
-      } else if (entityEnd == pos) {
+      } else if (entityEnd === pos) {
         cnt--;
         entity.length = utf16Pos - entity.offset;
       }
     }
-    CHECK(cnt == 0);
+    CHECK(cnt === 0);
   }
 
   return entities;
@@ -1552,8 +1544,8 @@ export function mergeEntities(
   oldEntities: MessageEntity[],
   newEntities: MessageEntity[],
 ) {
-  if (newEntities.length == 0) return oldEntities;
-  if (oldEntities.length == 0) return newEntities;
+  if (newEntities.length === 0) return oldEntities;
+  if (oldEntities.length === 0) return newEntities;
 
   const result = new Array<MessageEntity>(
     /* oldEntities.length + newEntities.length */
@@ -1563,7 +1555,7 @@ export function mergeEntities(
   const newEnd = newEntities.length;
   for (const oldEntity of oldEntities) {
     while (
-      newIt != newEnd &&
+      newIt !== newEnd &&
       (newEntities[newIt].offset + newEntities[newIt].length) <=
         oldEntity.offset
     ) {
@@ -1578,11 +1570,11 @@ export function mergeEntities(
     const removed = oldEntities.shift();
     if (removed == null) throw new Error("Old entity shouldn't be undefined.");
     result.push(oldEntity);
-    while (newIt != newEnd && newEntities[newIt].offset < oldEntityEnd) {
+    while (newIt !== newEnd && newEntities[newIt].offset < oldEntityEnd) {
       ++newIt;
     }
   }
-  while (newIt != newEnd) {
+  while (newIt !== newEnd) {
     result.push(newEntities[newIt]);
     ++newIt;
   }
@@ -1614,10 +1606,8 @@ export function getFirstUrl(text: FormattedText) {
         const url = utf8utf16Substr(text.text, entity.offset, entity.length);
         const scheme = toLower(url.slice(0, 4));
         if (
-          areTypedArraysEqual(scheme, encode("ton:")) ||
-          beginsWith(scheme, encode("tg:")) ||
-          areTypedArraysEqual(scheme, encode("ftp:")) ||
-          isPlainDomain(url)
+          areTypedArraysEqual(scheme, "ton:") || beginsWith(scheme, "tg:") ||
+          areTypedArraysEqual(scheme, "ftp:") || isPlainDomain(url)
         ) continue;
         return url;
       }
@@ -1692,7 +1682,7 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
         languageEnd++;
       }
 
-      if (i != languageEnd && languageEnd < size && text[languageEnd] !== CODEPOINTS["`"]) {
+      if (i !== languageEnd && languageEnd < size && text[languageEnd] !== CODEPOINTS["`"]) {
         language = text.slice(i, languageEnd);
         i = languageEnd;
       }
@@ -1720,11 +1710,11 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
       text[resultSize++] = text[i++];
     }
 
-    if (i == size) {
+    if (i === size) {
       throw new Error("Can't find end of the entity starting at byte offset " + beginPos);
     }
 
-    if (entityOffset != utf16Offset) {
+    if (entityOffset !== utf16Offset) {
       const entityLength = utf16Offset - entityOffset;
       switch (c) {
         case CODEPOINTS["_"]:
@@ -1750,7 +1740,7 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
             entities.push({ type: "text_mention", offset: entityOffset, length: entityLength, user_id: userId });
           } else {
             url = LinkManager.getCheckedLink(url);
-            if (url.length != 0) {
+            if (url.length !== 0) {
               entities.push({ type: "text_link", offset: entityOffset, length: entityLength, url: url });
             }
           }
@@ -1780,18 +1770,18 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
   return { text: text.slice(0, resultSize), entities };
 }
 
-export interface EntityInfo {
-  type: MessageEntityType;
-  argument: Uint8Array;
-  entityOffset: number;
-  entityByteOffset: number;
-  entityBeginPos: number;
-}
-
 export function parseMarkdownV2(text: Uint8Array): FormattedText {
   let resultSize = 0;
   let entities: MessageEntity[] = [];
   let utf16Offset = 0;
+
+  interface EntityInfo {
+    type: MessageEntityType;
+    argument: Uint8Array;
+    entityOffset: number;
+    entityByteOffset: number;
+    entityBeginPos: number;
+  }
 
   const nestedEntities: EntityInfo[] = [];
 
@@ -1805,12 +1795,12 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
     }
 
     let reservedCharacters = encode("_*[]()~`>#+-=|{}.!");
-    if (nestedEntities.length != 0) {
+    if (nestedEntities.length !== 0) {
       switch (nestedEntities[nestedEntities.length - 1].type) {
         case MessageEntityType.Code:
         case MessageEntityType.Pre:
         case MessageEntityType.PreCode:
-          reservedCharacters = encode("`");
+          reservedCharacters = Uint8Array.of(CODEPOINTS["`"]);
           break;
         default:
           break;
@@ -1929,7 +1919,7 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
       let { type, argument } = nestedEntities[nestedEntities.length - 1];
       let userId = new UserId();
       let customEmojiId = new CustomEmojiId();
-      let skipEntity = utf16Offset == nestedEntities.at(-1)!.entityOffset;
+      let skipEntity = utf16Offset === nestedEntities.at(-1)!.entityOffset;
       switch (type) {
         case MessageEntityType.Bold:
         case MessageEntityType.Italic:
@@ -2036,7 +2026,7 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
     }
   }
 
-  if (nestedEntities.length != 0) {
+  if (nestedEntities.length !== 0) {
     const last = nestedEntities[nestedEntities.length - 1];
     throw new Error(
       `Can't find end of ${
@@ -2066,7 +2056,7 @@ export function decodeHTMLEntity(text: Uint8Array, pos: number) {
         res = res * 10 + text[endPos++] - CODEPOINTS["0"];
       }
     }
-    if (res == 0 || res >= 0x10ffff || endPos - pos >= 10) {
+    if (res === 0 || res >= 0x10ffff || endPos - pos >= 10) {
       return 0;
     }
   } else {
@@ -2152,10 +2142,10 @@ export function parseHTML(str: Uint8Array) {
 
     const beginPos = i++;
     if (text[i] != null && text[i] !== CODEPOINTS["/"]) {
-      while (text[i] != null && !isSpace(text[i]) && text[i] != CODEPOINTS[">"]) {
+      while (text[i] != null && !isSpace(text[i]) && text[i] !== CODEPOINTS[">"]) {
         i++;
       }
-      if (text[i] == null || text[i] == 0) {
+      if (text[i] == null || text[i] === 0) {
         throw new Error("Unclosed start tag at byte offset " + beginPos);
       }
 
@@ -2167,7 +2157,7 @@ export function parseHTML(str: Uint8Array) {
 
       let argument = new Uint8Array();
 
-      while (text[i] != null && text[i] != CODEPOINTS[">"]) {
+      while (text[i] != null && text[i] !== CODEPOINTS[">"]) {
         while (text[i] != null && text[i] !== 0 && isSpace(text[i])) {
           i++;
         }
