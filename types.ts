@@ -22,14 +22,10 @@ export declare namespace MessageEntity {
       | "strikethrough"
       | "spoiler"
       | "code"
-      // non bot API
       | "pre"
+      // non bot API
       | "block_quote"
       | "bank_card_number";
-  }
-  export interface PreMessageEntity extends AbstractMessageEntity {
-    type: "pre_code";
-    language: Uint8Array;
   }
   export interface TextLinkMessageEntity extends AbstractMessageEntity {
     type: "text_link";
@@ -44,6 +40,10 @@ export declare namespace MessageEntity {
     custom_emoji_id: CustomEmojiId;
   }
   // non Bot API
+  export interface PreMessageEntity extends AbstractMessageEntity {
+    type: "pre_code";
+    language: Uint8Array;
+  }
   export interface MediaTimestampMessageEntity extends AbstractMessageEntity {
     type: "media_timestamp";
     timestamp: number;
