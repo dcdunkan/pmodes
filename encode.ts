@@ -15,8 +15,6 @@ export function encode(data: string) {
   return ENCODER.encode(data);
 }
 
-export function decode(data: number): string;
-export function decode(data: Uint8Array): string;
 export function decode(data: number | Uint8Array): string {
   return DECODER.decode(typeof data === "number" ? new Uint8Array([data]) : data);
 }

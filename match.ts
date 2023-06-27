@@ -2230,7 +2230,7 @@ export function parseHtml(str: Uint8Array) {
             last.length === entityLength && lastNested.argument.length !== 0
           ) {
             entities[entities.length - 1].type = "pre_code";
-            (entities[entities.length - 1] as MessageEntity.PreMessageEntity).language = lastNested.argument;
+            (entities[entities.length - 1] as MessageEntity.PreCodeMessageEntity).language = lastNested.argument;
           } else {
             const language = nestedEntities.at(-1)?.argument;
             entities.push({

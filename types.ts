@@ -40,7 +40,7 @@ export declare namespace MessageEntity {
     custom_emoji_id: CustomEmojiId;
   }
   // non Bot API
-  export interface PreMessageEntity extends AbstractMessageEntity {
+  export interface PreCodeMessageEntity extends AbstractMessageEntity {
     type: "pre_code";
     language: Uint8Array;
   }
@@ -53,7 +53,7 @@ export declare namespace MessageEntity {
 export type MessageEntity =
   | MessageEntity.CommonMessageEntity
   | MessageEntity.CustomEmojiMessageEntity
-  | MessageEntity.PreMessageEntity
+  | MessageEntity.PreCodeMessageEntity
   | MessageEntity.TextLinkMessageEntity
   | MessageEntity.TextMentionMessageEntity
   | MessageEntity.MediaTimestampMessageEntity;
