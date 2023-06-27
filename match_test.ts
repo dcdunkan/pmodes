@@ -39,9 +39,7 @@ Deno.test("mentions", () => {
   );
   check("no@mention", []);
   check("@n", []);
-  check("@abcdefghijklmnopqrstuvwxyz123456", [
-    "@abcdefghijklmnopqrstuvwxyz123456",
-  ]);
+  check("@abcdefghijklmnopqrstuvwxyz123456", ["@abcdefghijklmnopqrstuvwxyz123456"]);
   check("@abcdefghijklmnopqrstuvwxyz1234567", []);
   check("нет@mention", []);
   check(
@@ -217,9 +215,7 @@ Deno.test("bank card numbers", () => {
   check("1234567890128000000", ["1234567890128000000"]);
   check("12345678901500910000", []);
   check(" - - - - 1 - -- 2 - - -- 34 - - - 56- - 7890150000  - - - -", []);
-  check(" - - - - 1 - -- 234 - - 56- - 7890150000  - - - -", [
-    "1 - -- 234 - - 56- - 7890150000",
-  ]);
+  check(" - - - - 1 - -- 234 - - 56- - 7890150000  - - - -", ["1 - -- 234 - - 56- - 7890150000"]);
   check("4916-3385-0608-2832; 5280 9342 8317 1080 ;345936346788903", [
     "4916-3385-0608-2832",
     "5280 9342 8317 1080",
@@ -258,9 +254,7 @@ Deno.test("tg urls", () => {
   check("tg://test/#", ["tg://test/#"]);
   check("tg://test?", ["tg://test"]);
   check("tg://test#", ["tg://test"]);
-  check("tg://test/―asd―?asd=asd&asdas=―#――――", [
-    "tg://test/―asd―?asd=asd&asdas=―#――――",
-  ]);
+  check("tg://test/―asd―?asd=asd&asdas=―#――――", ["tg://test/―asd―?asd=asd&asdas=―#――――"]);
   check("tg://test/?asd", ["tg://test/?asd"]);
   check("tg://test/?.:;,('?!`.:;,('?!`", ["tg://test/"]);
   check("tg://test/#asdf", ["tg://test/#asdf"]);
@@ -440,9 +434,7 @@ Deno.test("url", () => {
   check(".telegram.org)", []);
   check("()telegram.org/?q=()", ["telegram.org/?q=()"]);
   check('"telegram.org"', ["telegram.org"]);
-  check(" telegram. org. www. com... telegram.org... ...google.com...", [
-    "telegram.org",
-  ]);
+  check(" telegram. org. www. com... telegram.org... ...google.com...", ["telegram.org"]);
   check(" telegram.org ", ["telegram.org"]);
   check(
     "Такой сайт: http://www.google.com или такой telegram.org ",
@@ -450,9 +442,7 @@ Deno.test("url", () => {
   );
   check(" telegram.org. ", ["telegram.org"]);
   check("http://google,.com", []);
-  check("http://telegram.org/?asd=123#123.", [
-    "http://telegram.org/?asd=123#123",
-  ]);
+  check("http://telegram.org/?asd=123#123.", ["http://telegram.org/?asd=123#123"]);
   check("[http://google.com](test)", ["http://google.com"]);
   check("", []);
   check(".", []);
@@ -533,21 +523,11 @@ Deno.test("url", () => {
   check("ÀÁ.com,ÀÁ.com.", ["ÀÁ.com", "ÀÁ.com"]);
   check("teiegram.org/test", []);
   check("TeiegraM.org/test", []);
-  check("http://test.google.com/?q=abc()}[]def", [
-    "http://test.google.com/?q=abc()",
-  ]);
-  check("http://test.google.com/?q=abc([{)]}def", [
-    "http://test.google.com/?q=abc([{)]}def",
-  ]);
-  check("http://test.google.com/?q=abc(){}]def", [
-    "http://test.google.com/?q=abc(){}",
-  ]);
-  check("http://test.google.com/?q=abc){}[]def", [
-    "http://test.google.com/?q=abc",
-  ]);
-  check("http://test.google.com/?q=abc(){}[]def", [
-    "http://test.google.com/?q=abc(){}[]def",
-  ]);
+  check("http://test.google.com/?q=abc()}[]def", ["http://test.google.com/?q=abc()"]);
+  check("http://test.google.com/?q=abc([{)]}def", ["http://test.google.com/?q=abc([{)]}def"]);
+  check("http://test.google.com/?q=abc(){}]def", ["http://test.google.com/?q=abc(){}"]);
+  check("http://test.google.com/?q=abc){}[]def", ["http://test.google.com/?q=abc"]);
+  check("http://test.google.com/?q=abc(){}[]def", ["http://test.google.com/?q=abc(){}[]def"]);
   check("http://test-.google.com", []);
   check("http://test_.google.com", ["http://test_.google.com"]);
   check("http://google_.com", []);
@@ -627,12 +607,8 @@ Deno.test("url", () => {
     ],
   );
   check("https://t.…", []);
-  check("('http://telegram.org/a-b/?br=ie&lang=en',)", [
-    "http://telegram.org/a-b/?br=ie&lang=en",
-  ]);
-  check("https://ai.telegram.org/bot%20bot/test-...", [
-    "https://ai.telegram.org/bot%20bot/test-",
-  ]);
+  check("('http://telegram.org/a-b/?br=ie&lang=en',)", ["http://telegram.org/a-b/?br=ie&lang=en"]);
+  check("https://ai.telegram.org/bot%20bot/test-...", ["https://ai.telegram.org/bot%20bot/test-"]);
   check("a.bc@c.com", [], ["a.bc@c.com"]);
   check("https://a.bc@c.com", ["https://a.bc@c.com"]);
   check("https://a.de[bc@c.com", ["https://a.de"], ["bc@c.com"]);
@@ -689,9 +665,7 @@ Deno.test("url", () => {
   check("👉http://ab.com/cdefgh-1IJ", ["http://ab.com/cdefgh-1IJ"]);
   check("...👉http://ab.com/cdefgh-1IJ", []); // TODO
   check(".?", []);
-  check("http://test―‑@―google―.―com―/―–―‐―/―/―/―?―‑―#―――", [
-    "http://test―‑@―google―.―com―/―–―‐―/―/―/―?―‑―#―――",
-  ]);
+  check("http://test―‑@―google―.―com―/―–―‐―/―/―/―?―‑―#―――", ["http://test―‑@―google―.―com―/―–―‐―/―/―/―?―‑―#―――"]);
   check("http://google.com/‖", ["http://google.com/"]);
   check("a@b@c.com", [], []);
   check("abc@c.com@d.com", []);
@@ -784,11 +758,7 @@ Deno.test("parse markdown v2", () => {
   check("➡️ ➡️_➡️ ➡️_", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Italic, 5, 5)]);
   check("➡️ ➡️_➡️ ➡️_*➡️ ➡️*", "➡️ ➡️➡️ ➡️➡️ ➡️", [
     new MessageEntity(MessageEntityType.Italic, 5, 5),
-    new MessageEntity(
-      MessageEntityType.Bold,
-      10,
-      5,
-    ),
+    new MessageEntity(MessageEntityType.Bold, 10, 5),
   ]);
   check("🏟 🏟_🏟 \\.🏟_", "🏟 🏟🏟 .🏟", [new MessageEntity(MessageEntityType.Italic, 5, 6)]);
   check("🏟 🏟_🏟 *🏟*_", "🏟 🏟🏟 🏟", [
@@ -797,27 +767,15 @@ Deno.test("parse markdown v2", () => {
   ]);
   check("🏟 🏟_🏟 __🏟___", "🏟 🏟🏟 🏟", [
     new MessageEntity(MessageEntityType.Italic, 5, 5),
-    new MessageEntity(
-      MessageEntityType.Underline,
-      8,
-      2,
-    ),
+    new MessageEntity(MessageEntityType.Underline, 8, 2),
   ]);
   check("🏟 🏟__🏟 _🏟_ __", "🏟 🏟🏟 🏟 ", [
     new MessageEntity(MessageEntityType.Underline, 5, 6),
-    new MessageEntity(
-      MessageEntityType.Italic,
-      8,
-      2,
-    ),
+    new MessageEntity(MessageEntityType.Italic, 8, 2),
   ]);
   check("🏟 🏟__🏟 _🏟_\\___", "🏟 🏟🏟 🏟_", [
     new MessageEntity(MessageEntityType.Underline, 5, 6),
-    new MessageEntity(
-      MessageEntityType.Italic,
-      8,
-      2,
-    ),
+    new MessageEntity(MessageEntityType.Italic, 8, 2),
   ]);
   check("🏟 🏟`🏟 🏟```", "🏟 🏟🏟 🏟", [new MessageEntity(MessageEntityType.Code, 5, 5)]);
   check("🏟 🏟```🏟 🏟```", "🏟 🏟 🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
@@ -848,62 +806,27 @@ Deno.test("parse markdown v2", () => {
   check("[ ](telegram.org)", " ", [new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/"))]);
   check("[ ](as)", " ", []);
   check("[telegram\\.org]", "telegram.org", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      12,
-      encode("http://telegram.org/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.org/")),
   ]);
   check("[telegram\\.org]a", "telegram.orga", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      12,
-      encode("http://telegram.org/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.org/")),
   ]);
   check("[telegram\\.org](telegram.dog)", "telegram.org", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      12,
-      encode("http://telegram.dog/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.dog/")),
   ]);
   check("[telegram\\.org](https://telegram.dog?)", "telegram.org", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      12,
-      encode("https://telegram.dog/?"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("https://telegram.dog/?")),
   ]);
   check("[telegram\\.org](https://telegram.dog?\\\\\\()", "telegram.org", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      12,
-      encode("https://telegram.dog/?\\("),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("https://telegram.dog/?\\(")),
   ]);
   check("[telegram\\.org]()", "telegram.org", []);
   check("[telegram\\.org](asdasd)", "telegram.org", []);
   check("[telegram\\.org](tg:user?id=123456)", "telegram.org", [
-    new MessageEntity(
-      MessageEntityType.MentionName,
-      0,
-      12,
-      new UserId(123456n),
-    ),
+    new MessageEntity(MessageEntityType.MentionName, 0, 12, new UserId(123456n)),
   ]);
   check("🏟 🏟![👍](TG://EMoJI/?test=1231&id=25#id=32)a", "🏟 🏟👍a", [
-    new MessageEntity(
-      MessageEntityType.CustomEmoji,
-      5,
-      2,
-      new CustomEmojiId(25n),
-    ),
+    new MessageEntity(MessageEntityType.CustomEmoji, 5, 2, new CustomEmojiId(25n)),
   ]);
 });
 
@@ -1000,28 +923,13 @@ Deno.test("parse html", () => {
     new MessageEntity(MessageEntityType.Bold, 9, 3),
   ]);
   check("<a href=telegram.org>\t</a>", "\t", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      1,
-      encode("http://telegram.org/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/")),
   ]);
   check("<a href=telegram.org>\r</a>", "\r", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      1,
-      encode("http://telegram.org/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/")),
   ]);
   check("<a href=telegram.org>\n</a>", "\n", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      1,
-      encode("http://telegram.org/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/")),
   ]);
   check("<code><i><b> </b></i></code><i><b><code> </code></b></i>", "  ", [
     new MessageEntity(MessageEntityType.Code, 0, 1),
@@ -1037,46 +945,21 @@ Deno.test("parse html", () => {
     new MessageEntity(MessageEntityType.Code, 2, 1),
   ]);
   check("<a href=telegram.org> </a>", " ", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      1,
-      encode("http://telegram.org/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/")),
   ]);
   check('<a href  ="telegram.org"   > </a>', " ", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      1,
-      encode("http://telegram.org/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/")),
   ]);
   check("<a   href=  'telegram.org'   > </a>", " ", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      1,
-      encode("http://telegram.org/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/")),
   ]);
   check("<a   href=  'telegram.org?&lt;'   > </a>", " ", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      1,
-      encode("http://telegram.org/?<"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/?<")),
   ]);
   check("<a> </a>", " ", []);
   check("<a>telegram.org </a>", "telegram.org ", []);
   check("<a>telegram.org</a>", "telegram.org", [
-    new MessageEntity(
-      MessageEntityType.TextUrl,
-      0,
-      12,
-      encode("http://telegram.org/"),
-    ),
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.org/")),
   ]);
   check("<a>https://telegram.org/asdsa?asdasdwe#12e3we</a>", "https://telegram.org/asdsa?asdasdwe#12e3we", [
     new MessageEntity(MessageEntityType.TextUrl, 0, 42, encode("https://telegram.org/asdsa?asdasdwe#12e3we")),
