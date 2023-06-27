@@ -17,7 +17,9 @@ actually works.
 <details>
   <summary>Anyway, thank you.</summary>
 
-##### For now, here is what have been ported properly. But of course, they still might have a few bugs. And I'm just showing off!
+#### Here is what we currently have here. <sup>I'm just showing off!</sup>
+
+But of course, they still might have a few bugs. If you ever encounter one please consider opening an issue.
 
 ###### match.ts (td/telegram/MessageEntity.cpp)
 
