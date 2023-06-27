@@ -27,9 +27,9 @@ import {
   UNREACHABLE,
 } from "./utilities.ts";
 import {
-  appendUTF8CharacterUnsafe,
-  checkUTF8,
-  isUTF8CharacterFirstCodeUnit,
+  appendUtf8CharacterUnsafe,
+  checkUtf8,
+  isUtf8CharacterFirstCodeUnit,
   nextUtf8Unsafe,
   prevUtf8Unsafe,
   utf8Length,
@@ -1554,7 +1554,7 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
     }
 
     if (c != null && c !== CODEPOINTS["_"] && c !== CODEPOINTS["*"] && c !== CODEPOINTS["`"] && c !== CODEPOINTS["["]) {
-      if (isUTF8CharacterFirstCodeUnit(c)) {
+      if (isUtf8CharacterFirstCodeUnit(c)) {
         utf16Offset += 1 + ((c >= 0xf0) ? 1 : 0);
       }
       text[resultSize++] = text[i];
@@ -1600,7 +1600,7 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
         (isPre && !(text[i + 1] === CODEPOINTS["`"] && text[i + 2] === CODEPOINTS["`"])))
     ) {
       const curCh = text[i];
-      if (isUTF8CharacterFirstCodeUnit(curCh)) {
+      if (isUtf8CharacterFirstCodeUnit(curCh)) {
         utf16Offset += 1 + (curCh >= 0xf0 ? 1 : 0);
       }
       text[resultSize++] = text[i++];
@@ -1704,7 +1704,7 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
     }
 
     if (!reservedCharacters.includes(text[i])) {
-      if (isUTF8CharacterFirstCodeUnit(c)) {
+      if (isUtf8CharacterFirstCodeUnit(c)) {
         utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
       }
       text[resultSize++] = text[i];
@@ -2023,13 +2023,13 @@ export function parseHtml(str: Uint8Array) {
         if (code.res >= 0xd800 && code.res <= 0xdfff) {
           needRecheckUtf8 = true;
         }
-        resultEnd = appendUTF8CharacterUnsafe(str, resultEnd, code.res);
+        resultEnd = appendUtf8CharacterUnsafe(str, resultEnd, code.res);
         CHECK(resultEnd <= resultBegin + i);
         continue;
       }
     }
     if (c != null && c !== CODEPOINTS["<"]) {
-      if (isUTF8CharacterFirstCodeUnit(c)) {
+      if (isUtf8CharacterFirstCodeUnit(c)) {
         utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
       }
       str[resultEnd++] = c;
@@ -2105,7 +2105,7 @@ export function parseHtml(str: Uint8Array) {
               const code = decodeHtmlEntity(str, i);
               if (code !== 0) {
                 i = code.pos;
-                attributeEnd = appendUTF8CharacterUnsafe(str, attributeEnd, code.res);
+                attributeEnd = appendUtf8CharacterUnsafe(str, attributeEnd, code.res);
                 continue;
               }
             }
@@ -2262,7 +2262,7 @@ export function parseHtml(str: Uint8Array) {
   entities = sortEntities(entities);
 
   str = str.subarray(0, resultEnd);
-  if (needRecheckUtf8 && !checkUTF8(str)) {
+  if (needRecheckUtf8 && !checkUtf8(str)) {
     throw new Error(
       "Text contains invalid Unicode characters after decoding HTML entities, check for unmatched " +
         "surrogate code units",

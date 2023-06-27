@@ -2,14 +2,14 @@ import { mergeTypedArrays } from "./encode.ts";
 import { unicodeToLower } from "./unicode.ts";
 import { UNREACHABLE } from "./utilities.ts";
 
-export function isUTF8CharacterFirstCodeUnit(c: number): boolean {
+export function isUtf8CharacterFirstCodeUnit(c: number): boolean {
   return (c & 0xC0) !== 0x80;
 }
 
 export function utf8Length(str: Uint8Array): number {
   let result = 0;
   for (const c of str) {
-    result += isUTF8CharacterFirstCodeUnit(c) ? 1 : 0;
+    result += isUtf8CharacterFirstCodeUnit(c) ? 1 : 0;
   }
   return result;
 }
@@ -17,13 +17,13 @@ export function utf8Length(str: Uint8Array): number {
 export function utf8utf16Length(str: Uint8Array): number {
   let result = 0;
   for (const c of str) {
-    result += (isUTF8CharacterFirstCodeUnit(c) ? 1 : 0) + (((c & 0xf8) === 0xf0) ? 1 : 0);
+    result += (isUtf8CharacterFirstCodeUnit(c) ? 1 : 0) + (((c & 0xf8) === 0xf0) ? 1 : 0);
   }
   return result;
 }
 
 export function prevUtf8Unsafe(data: Uint8Array, pos: number): number {
-  while (!isUTF8CharacterFirstCodeUnit(data[--pos])) {
+  while (!isUtf8CharacterFirstCodeUnit(data[--pos])) {
     // pass
   }
   return pos;
@@ -48,7 +48,7 @@ export function nextUtf8Unsafe(data: Uint8Array, pos: number): { code: number; p
   UNREACHABLE();
 }
 
-export function appendUTF8CharacterUnsafe(text: number[] | Uint8Array, pos: number, code: number): number {
+export function appendUtf8CharacterUnsafe(text: number[] | Uint8Array, pos: number, code: number): number {
   if (code <= 0x7f) {
     text[pos++] = code;
   } else if (code <= 0x7ff) {
@@ -102,7 +102,7 @@ export function utf8ToLower(str: Uint8Array): Uint8Array {
 export function utf8Truncate(str: Uint8Array, length: number): Uint8Array {
   if (str.length > length) {
     for (let i = 0; i < str.length; i++) {
-      if (isUTF8CharacterFirstCodeUnit(str[i])) {
+      if (isUtf8CharacterFirstCodeUnit(str[i])) {
         if (length === 0) return str.slice(0, i);
         else length--;
       }
@@ -114,7 +114,7 @@ export function utf8Truncate(str: Uint8Array, length: number): Uint8Array {
 export function utf8utf16Truncate(str: Uint8Array, length: number): Uint8Array {
   for (let i = 0; i < str.length; i++) {
     const c = str[i];
-    if (isUTF8CharacterFirstCodeUnit(c)) {
+    if (isUtf8CharacterFirstCodeUnit(c)) {
       if (length <= 0) {
         return str.slice(0, i);
       } else {
@@ -143,7 +143,7 @@ export function utf8utf16Substr(str: Uint8Array, offset: number, length?: number
   return str.slice(offsetPos);
 }
 
-export function checkUTF8(str: Uint8Array) {
+export function checkUtf8(str: Uint8Array) {
   let data = 0;
   const dataEnd = str.length;
 
