@@ -1656,7 +1656,7 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
   let utf16Offset = 0;
 
   for (let i = 0; i < size; i++) {
-    const c = text[i], codepoint = text[i], next = text[i + 1];
+    const c = text[i], next = text[i + 1];
     if (
       c === CODEPOINTS["\\"] &&
       (next === CODEPOINTS["_"] || next === CODEPOINTS["*"] || next === CODEPOINTS["`"] || next === CODEPOINTS["["])
@@ -1667,9 +1667,9 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
       continue;
     }
 
-    if (c !== CODEPOINTS["_"] && c !== CODEPOINTS["*"] && c !== CODEPOINTS["`"] && c !== CODEPOINTS["["]) {
-      if (isUTF8CharacterFirstCodeUnit(codepoint)) {
-        utf16Offset += 1 + ((codepoint >= 0xf0) ? 1 : 0);
+    if (c != null && c !== CODEPOINTS["_"] && c !== CODEPOINTS["*"] && c !== CODEPOINTS["`"] && c !== CODEPOINTS["["]) {
+      if (isUTF8CharacterFirstCodeUnit(c)) {
+        utf16Offset += 1 + ((c >= 0xf0) ? 1 : 0);
       }
       text[resultSize++] = text[i];
       continue;
@@ -1688,7 +1688,7 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
       isPre = true;
       let languageEnd = i;
 
-      while (!isSpace(text[languageEnd]) && text[languageEnd] !== CODEPOINTS["`"]) {
+      while (text[languageEnd] != null && !isSpace(text[languageEnd]) && text[languageEnd] !== CODEPOINTS["`"]) {
         languageEnd++;
       }
 
@@ -1734,7 +1734,7 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
           entities.push({ type: "bold", offset: entityOffset, length: entityLength });
           break;
         case CODEPOINTS["["]: {
-          let url = new Uint8Array();
+          let url: Uint8Array;
           if (text[i + 1] !== CODEPOINTS["("]) {
             url = text.slice(beginPos + 1, i);
           } else {
