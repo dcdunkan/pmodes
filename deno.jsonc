@@ -3,10 +3,8 @@
   "fmt": {
     "lineWidth": 120
   },
-  "lint": {
-    "exclude": ["test_bot.ts"]
-  },
   "tasks": {
+    "check": "deno cache --check=all mod.ts",
     "test": "deno test --no-check"
   }
 }
