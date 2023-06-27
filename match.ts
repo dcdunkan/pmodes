@@ -1,13 +1,9 @@
 import { CustomEmojiId } from "./custom_emoji_id.ts";
 import { LinkManager } from "./link_manager.ts";
-import { MessageEntity, MessageEntityType } from "./types.ts";
 import { UserId } from "./user_id.ts";
 import {
   beginsWith,
   CHECK,
-  convertEntityTypeEnumToString,
-  convertEntityTypeEnumToStyledString,
-  convertEntityTypeStringToEnum,
   endsWith,
   fullSplit,
   hexToInt,
@@ -41,6 +37,7 @@ import {
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 import { areTypedArraysEqual, CODEPOINTS, decode, encode, toInteger } from "./encode.ts";
 import { BAD_PATH_END_CHARACTERS, COMMON_TLDS } from "./constants.ts";
+import { getTypePriority, MessageEntity, MessageEntityType, messageEntityTypeString } from "./message_entity.ts";
 
 export type Position = [number, number];
 
@@ -1015,43 +1012,16 @@ export function textLength(text: Uint8Array): number {
   return utf8utf16Length(text);
 }
 
-export function getTypePriority(type: MessageEntityType): number {
-  const priorities = [
-    50, /* Mention */
-    50, /* Hashtag */
-    50, /* BotCommand */
-    50, /* Url */
-    50, /* EmailAddress */
-    90, /* Bold */
-    91, /* Italic */
-    20, /* Code */
-    11, /* Pre */
-    10, /* PreCode */
-    49, /* TextUrl */
-    49, /* MentionName */
-    50, /* Cashtag */
-    50, /* PhoneNumber */
-    92, /* Underline */
-    93, /* Strikethrough */
-    0, /* Blockquote */
-    50, /* BankCardNumber */
-    50, /* MediaTimestamp */
-    94, /* Spoiler */
-    99, /* CustomEmoji */
-  ];
-  return priorities[type];
-}
-
 export function removeEmptyEntities(entities: MessageEntity[]): MessageEntity[] {
   return entities.filter((entity) => {
     if (entity.length <= 0) return false;
     switch (entity.type) {
-      case "text_link":
-        return entity.url.length !== 0;
-      case "text_mention":
-        return entity.user_id.isValid();
-      case "custom_emoji":
-        return entity.custom_emoji_id.isValid();
+      case MessageEntityType.TextUrl:
+        return entity.argument.length !== 0;
+      case MessageEntityType.MentionName:
+        return entity.userId.isValid();
+      case MessageEntityType.CustomEmoji:
+        return entity.customEmojiId.isValid();
       default:
         return true;
     }
@@ -1066,8 +1036,8 @@ export function sortEntities(entities: MessageEntity[]) {
     if (length !== other.length) {
       return length > other.length ? -1 : 1;
     }
-    const priority = getTypePriority(convertEntityTypeStringToEnum(type));
-    const otherPriority = getTypePriority(convertEntityTypeStringToEnum(other.type));
+    const priority = getTypePriority(type);
+    const otherPriority = getTypePriority(other.type);
     return priority < otherPriority ? -1 : 1;
   });
 }
@@ -1078,24 +1048,24 @@ export function isSorted(entities: MessageEntity[]) {
     const entity = entities[i], sorted = sortedEntities[i];
     if (entity.type !== sorted.type || entity.length !== sorted.length || entity.offset !== sorted.offset) return false;
     if (
-      entity.type === "pre_code" && sorted.type === "pre_code" &&
-      !areTypedArraysEqual(entity.language, sorted.language)
+      entity.type === MessageEntityType.PreCode && sorted.type === MessageEntityType.PreCode &&
+      !areTypedArraysEqual(entity.argument, sorted.argument)
     ) return false;
     if (
-      entity.type === "text_link" && sorted.type === "text_link" &&
-      !areTypedArraysEqual(entity.url, sorted.url)
+      entity.type === MessageEntityType.TextUrl && sorted.type === MessageEntityType.TextUrl &&
+      !areTypedArraysEqual(entity.argument, sorted.argument)
     ) {
       return false;
     }
     if (
-      entity.type === "text_mention" && sorted.type === "text_mention" &&
-      entity.user_id.id !== sorted.user_id.id
+      entity.type === MessageEntityType.MentionName && sorted.type === MessageEntityType.MentionName &&
+      entity.userId.id !== sorted.userId.id
     ) {
       return false;
     }
     if (
-      entity.type === "custom_emoji" && sorted.type === "custom_emoji" &&
-      entity.custom_emoji_id.id !== sorted.custom_emoji_id.id
+      entity.type === MessageEntityType.CustomEmoji && sorted.type === MessageEntityType.CustomEmoji &&
+      entity.customEmojiId.id !== sorted.customEmojiId.id
     ) return false;
   }
   return true;
@@ -1124,7 +1094,7 @@ export function getSplittableEntitiesMask() {
 }
 
 export function getBlockquoteEntitesMask() {
-  return getEntityTypeMask(MessageEntityType.Blockquote);
+  return getEntityTypeMask(MessageEntityType.BlockQuote);
 }
 
 export function getContinuousEntitiesMask() {
@@ -1162,7 +1132,7 @@ export function isSplittableEntity(type: MessageEntityType) {
 }
 
 export function isBlockquoteEntity(type: MessageEntityType) {
-  return type === MessageEntityType.Blockquote;
+  return type === MessageEntityType.BlockQuote;
 }
 
 export function isContinuousEntity(type: MessageEntityType) {
@@ -1200,72 +1170,49 @@ export function getSplittableEntityTypeIndex(type: MessageEntityType) {
 export function areEntitiesValid(entities: MessageEntity[]): boolean {
   if (entities.length === 0) return true;
   checkIsSorted(entities); // has to be?
+
   const endPos = new Array<number>(SPLITTABLE_ENTITY_TYPE_COUNT).fill(-1);
   const nestedEntitiesStack: MessageEntity[] = [];
   let nestedEntityTypeMask = 0;
 
   for (const entity of entities) {
-    const entityType = convertEntityTypeStringToEnum(entity.type);
-
     while (
       nestedEntitiesStack.length !== 0 &&
-      entity.offset >=
-        (nestedEntitiesStack[nestedEntitiesStack.length - 1].offset +
-          nestedEntitiesStack[nestedEntitiesStack.length - 1].length)
+      entity.offset >= (nestedEntitiesStack.at(-1)!.offset + nestedEntitiesStack.at(-1)!.length)
     ) {
-      const last = nestedEntitiesStack[nestedEntitiesStack.length - 1];
-      nestedEntityTypeMask -= getEntityTypeMask(convertEntityTypeStringToEnum(last.type));
+      nestedEntityTypeMask -= getEntityTypeMask(nestedEntitiesStack.at(-1)!.type);
       nestedEntitiesStack.pop();
     }
 
     if (nestedEntitiesStack.length !== 0) {
-      if (
-        entity.offset + entity.length >
-          nestedEntitiesStack[nestedEntitiesStack.length - 1].offset +
-            nestedEntitiesStack[nestedEntitiesStack.length - 1].length
-      ) return false;
-
-      if ((nestedEntityTypeMask & getEntityTypeMask(convertEntityTypeStringToEnum(entity.type))) !== 0) {
+      if (entity.offset + entity.length > nestedEntitiesStack.at(-1)!.offset + nestedEntitiesStack.at(-1)!.length) {
         return false;
       }
-
-      const parent = nestedEntitiesStack[nestedEntitiesStack.length - 1];
-      const parentType = convertEntityTypeStringToEnum(parent.type);
-
-      if (isPreEntity(parentType)) {
-        return false;
-      }
+      if ((nestedEntityTypeMask & getEntityTypeMask(entity.type)) !== 0) return false;
+      const parentType = nestedEntitiesStack.at(-1)!.type;
+      if (isPreEntity(parentType)) return false;
+      if (isPreEntity(entity.type) && (nestedEntityTypeMask & ~getBlockquoteEntitesMask()) !== 0) return false;
       if (
-        isPreEntity(entityType) &&
-        (nestedEntityTypeMask & ~getBlockquoteEntitesMask()) !== 0
-      ) return false;
-
-      if (
-        (isContinuousEntity(entityType) || isBlockquoteEntity(entityType)) &&
+        (isContinuousEntity(entity.type) || isBlockquoteEntity(entity.type)) &&
         (nestedEntityTypeMask & getContinuousEntitiesMask()) !== 0
       ) return false;
-
-      if ((nestedEntityTypeMask & getSplittableEntitiesMask()) !== 0) {
-        return false;
-      }
+      if ((nestedEntityTypeMask & getSplittableEntitiesMask()) !== 0) return false;
     }
 
-    if (isSplittableEntity(entityType)) {
-      const index = getSplittableEntityTypeIndex(entityType);
+    if (isSplittableEntity(entity.type)) {
+      const index = getSplittableEntityTypeIndex(entity.type);
       if (endPos[index] >= entity.offset) return false; // can be merged.
       endPos[index] = entity.offset + entity.length;
     }
 
     nestedEntitiesStack.push(entity);
-    nestedEntityTypeMask += getEntityTypeMask(entityType);
+    nestedEntityTypeMask += getEntityTypeMask(entity.type);
   }
 
   return true;
 }
 
-export function removeIntersectingEntities(
-  entities: MessageEntity[],
-): MessageEntity[] {
+export function removeIntersectingEntities(entities: MessageEntity[]): MessageEntity[] {
   checkIsSorted(entities);
   let lastEntityEnd = 0;
   let leftEntities = 0;
@@ -1297,20 +1244,16 @@ export function removeEntitiesIntersectingBlockquote(
   for (let i = 0; i < entities.length; i++) {
     while (
       blockquoteIt !== blockquoteEntities.length &&
-      (convertEntityTypeStringToEnum(blockquoteEntities[blockquoteIt].type) !==
-          MessageEntityType.Blockquote ||
-        blockquoteEntities[blockquoteIt].offset +
-              blockquoteEntities[blockquoteIt].length <= entities[i].offset)
+      (blockquoteEntities[blockquoteIt].type !== MessageEntityType.BlockQuote ||
+        blockquoteEntities[blockquoteIt].offset + blockquoteEntities[blockquoteIt].length <= entities[i].offset)
     ) {
       ++blockquoteIt;
     }
     const blockquote = blockquoteEntities[blockquoteIt];
     if (
       blockquoteIt !== blockquoteEntities.length &&
-      (blockquote.offset + blockquote.length <
-          entities[i].offset + entities[i].length ||
-        (entities[i].offset < blockquote.offset &&
-          blockquote.offset < entities[i].offset + entities[i].length))
+      (blockquote.offset + blockquote.length < entities[i].offset + entities[i].length ||
+        (entities[i].offset < blockquote.offset && blockquote.offset < entities[i].offset + entities[i].length))
     ) {
       continue;
     }
@@ -1325,8 +1268,9 @@ export function removeEntitiesIntersectingBlockquote(
   return entities;
 }
 
-export function fixEntityOffsets(text: Uint8Array, entities: MessageEntity[]): MessageEntity[] | undefined {
-  if (entities.length === 0) return;
+export function fixEntityOffsets(text: Uint8Array, entities: MessageEntity[]): MessageEntity[] {
+  if (entities.length === 0) return entities;
+
   entities = sortEntities(entities);
   entities = removeIntersectingEntities(entities);
 
@@ -1380,11 +1324,7 @@ export function findEntities(
     for (const entity of newEntities) {
       const offset = entity[0];
       const length = entity[1] - entity[0];
-      entities.push({
-        type: convertEntityTypeEnumToString(type) as MessageEntity.CommonMessageEntity["type"],
-        offset,
-        length,
-      });
+      entities.push(new MessageEntity(type, offset, length));
     }
   }
 
@@ -1400,38 +1340,36 @@ export function findEntities(
 
   const urls = findUrls(text);
   for (const [url, email] of urls) {
-    const type = email ? "email" : "url";
+    const type = email ? MessageEntityType.EmailAddress : MessageEntityType.Url;
     const offset = url[0];
     const length = url[1] - url[0];
-    entities.push({ type, offset, length });
+    entities.push(new MessageEntity(type, offset, length));
   }
   if (!skipMediaTimestamps) {
     const mediaTimestamps = findMediaTimestamps(text);
     for (const [entity, timestamp] of mediaTimestamps) {
       const offset = entity[0];
       const length = entity[1] - entity[0];
-      entities.push({ type: "media_timestamp", offset, length, timestamp });
+      entities.push(new MessageEntity(MessageEntityType.MediaTimestamp, offset, length, timestamp));
     }
   }
 
-  const fixedEntities = fixEntityOffsets(text, entities);
-  if (fixedEntities != null) entities = fixedEntities;
+  entities = fixEntityOffsets(text, entities);
 
   return entities;
 }
 
-export function findMediaTimestampEntities(text: Uint8Array) {
+export function findMediaTimestampEntities(text: Uint8Array): MessageEntity[] {
   let entities: MessageEntity[] = [];
 
   const mediaTimestamps = findMediaTimestamps(text);
   for (const [entity, timestamp] of mediaTimestamps) {
     const offset = entity[0];
     const length = entity[1] - entity[0];
-    entities.push({ type: "media_timestamp", offset, length, timestamp });
+    entities.push(new MessageEntity(MessageEntityType.MediaTimestamp, offset, length, timestamp));
   }
 
-  const fixedEntities = fixEntityOffsets(text, entities);
-  if (fixedEntities != null) entities = fixedEntities;
+  entities = fixEntityOffsets(text, entities);
 
   return entities;
 }
@@ -1439,7 +1377,7 @@ export function findMediaTimestampEntities(text: Uint8Array) {
 export function mergeEntities(
   oldEntities: MessageEntity[],
   newEntities: MessageEntity[],
-) {
+): MessageEntity[] {
   if (newEntities.length === 0) return oldEntities;
   if (oldEntities.length === 0) return newEntities;
 
@@ -1450,11 +1388,7 @@ export function mergeEntities(
   let newIt = 0;
   const newEnd = newEntities.length;
   for (const oldEntity of oldEntities) {
-    while (
-      newIt !== newEnd &&
-      (newEntities[newIt].offset + newEntities[newIt].length) <=
-        oldEntity.offset
-    ) {
+    while (newIt !== newEnd && (newEntities[newIt].offset + newEntities[newIt].length) <= oldEntity.offset) {
       const removed = newEntities.shift();
       if (removed == null) {
         throw new Error("New entity shouldn't be undefined.");
@@ -1489,15 +1423,14 @@ export interface FormattedText {
   entities: MessageEntity[];
 }
 
-export function getFirstUrl(text: FormattedText) {
+export function getFirstUrl(text: FormattedText): Uint8Array {
   for (const entity of text.entities) {
     switch (entity.type) {
-      case "mention":
-      case "hashtag":
-      case "cashtag":
-      case "bot_command":
+      case MessageEntityType.Mention:
+      case MessageEntityType.Hashtag:
+      case MessageEntityType.BotCommand:
         break;
-      case "url": {
+      case MessageEntityType.Url: {
         if (entity.length <= 4) continue;
         const url = utf8utf16Substr(text.text, entity.offset, entity.length);
         const scheme = toLower(url.slice(0, 4));
@@ -1507,32 +1440,35 @@ export function getFirstUrl(text: FormattedText) {
         ) continue;
         return url;
       }
-      case "email":
-      case "phone_number":
-      case "bold":
-      case "italic":
-      case "underline":
-      case "strikethrough":
-      case "spoiler":
-      case "code":
-      case "pre_code":
-      case "block_quote":
-      case "bank_card_number":
-      case "custom_emoji":
-      case "pre":
+      case MessageEntityType.EmailAddress:
+      case MessageEntityType.Bold:
+      case MessageEntityType.Italic:
+      case MessageEntityType.Underline:
+      case MessageEntityType.Strikethrough:
+      case MessageEntityType.BlockQuote:
+      case MessageEntityType.Code:
+      case MessageEntityType.Pre:
+      case MessageEntityType.PreCode:
         break;
-      case "text_link": {
-        const url = entity.url;
+      case MessageEntityType.TextUrl: {
+        const url = entity.argument;
         if (beginsWith(url, "ton:") || beginsWith(url, "tg:") || beginsWith(url, "ftp:")) continue;
         return url;
       }
-      case "text_mention":
-      case "media_timestamp":
+      case MessageEntityType.MentionName:
+      case MessageEntityType.Cashtag:
+      case MessageEntityType.PhoneNumber:
+      case MessageEntityType.BankCardNumber:
+      case MessageEntityType.MediaTimestamp:
+      case MessageEntityType.Spoiler:
+      case MessageEntityType.CustomEmoji:
         break;
+      default:
+        UNREACHABLE();
     }
   }
 
-  return "";
+  return new Uint8Array();
 }
 
 export function parseMarkdown(text: Uint8Array): FormattedText {
@@ -1614,10 +1550,10 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
       const entityLength = utf16Offset - entityOffset;
       switch (c) {
         case CODEPOINTS["_"]:
-          entities.push({ type: "italic", offset: entityOffset, length: entityLength });
+          entities.push(new MessageEntity(MessageEntityType.Italic, entityOffset, entityLength));
           break;
         case CODEPOINTS["*"]:
-          entities.push({ type: "bold", offset: entityOffset, length: entityLength });
+          entities.push(new MessageEntity(MessageEntityType.Bold, entityOffset, entityLength));
           break;
         case CODEPOINTS["["]: {
           let url: Uint8Array;
@@ -1633,11 +1569,11 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
           }
           const userId = LinkManager.getLinkUserId(url);
           if (userId.isValid()) {
-            entities.push({ type: "text_mention", offset: entityOffset, length: entityLength, user_id: userId });
+            entities.push(new MessageEntity(MessageEntityType.MentionName, entityOffset, entityLength, userId));
           } else {
             url = LinkManager.getCheckedLink(url);
             if (url.length !== 0) {
-              entities.push({ type: "text_link", offset: entityOffset, length: entityLength, url: url });
+              entities.push(new MessageEntity(MessageEntityType.TextUrl, entityOffset, entityLength, url));
             }
           }
           break;
@@ -1645,12 +1581,12 @@ export function parseMarkdown(text: Uint8Array): FormattedText {
         case CODEPOINTS["`"]:
           if (isPre) {
             if (language == null || language.length === 0) {
-              entities.push({ type: "pre", offset: entityOffset, length: entityLength });
+              entities.push(new MessageEntity(MessageEntityType.Pre, entityOffset, entityLength));
             } else {
-              entities.push({ type: "pre_code", offset: entityOffset, length: entityLength, language });
+              entities.push(new MessageEntity(MessageEntityType.PreCode, entityOffset, entityLength, language));
             }
           } else {
-            entities.push({ type: "code", offset: entityOffset, length: entityLength });
+            entities.push(new MessageEntity(MessageEntityType.Italic, entityOffset, entityLength));
           }
           break;
         default:
@@ -1803,11 +1739,11 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
             i++;
             type = MessageEntityType.CustomEmoji;
           } else {
-            throw new Error(`Character '${decode(c)}' is reserved and must be escaped with the preceding '\\'`);
+            throw new Error(`Character '${decode(text[i])}' is reserved and must be escaped with the preceding '\\'`);
           }
           break;
         default:
-          throw new Error(`Character '${decode(c)}' is reserved and must be escaped with the preceding '\\'`);
+          throw new Error(`Character '${decode(text[i])}' is reserved and must be escaped with the preceding '\\'`);
       }
 
       nestedEntities.push({ type, argument, entityOffset: utf16Offset, entityByteOffset, entityBeginPos: resultSize });
@@ -1894,27 +1830,12 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
         const entityOffset = nestedEntities.at(-1)!.entityOffset;
         const entityLength = utf16Offset - entityOffset;
         if (userId.isValid()) {
-          entities.push({ type: "text_mention", offset: entityOffset, length: entityLength, user_id: userId });
+          entities.push(new MessageEntity(MessageEntityType.MentionName, entityOffset, entityLength, userId));
         } else if (customEmojiId.isValid()) {
-          entities.push({
-            type: "custom_emoji",
-            offset: entityOffset,
-            length: entityLength,
-            custom_emoji_id: customEmojiId,
-          });
+          entities.push(new MessageEntity(type, entityOffset, entityLength, customEmojiId));
         } else {
-          const entity: MessageEntity = {
-            ...(
-              type === MessageEntityType.TextUrl
-                ? { type: "text_link", url: argument }
-                : type === MessageEntityType.PreCode
-                ? { type: "pre_code", language: argument }
-                : { type: convertEntityTypeEnumToString(type) as MessageEntity.CommonMessageEntity["type"] }
-            ),
-            offset: entityOffset,
-            length: entityLength,
-          };
-          entities.push(entity);
+          const hasArgument = type === MessageEntityType.TextUrl || type === MessageEntityType.PreCode;
+          entities.push(new MessageEntity(type, entityOffset, entityLength, hasArgument ? argument : undefined));
         }
       }
 
@@ -1925,9 +1846,7 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
   if (nestedEntities.length !== 0) {
     const last = nestedEntities[nestedEntities.length - 1];
     throw new Error(
-      `Can't find end of ${
-        convertEntityTypeEnumToStyledString(last.type)
-      } entity at byte offset ${last.entityByteOffset}`,
+      `Can't find end of ${messageEntityTypeString(last.type)} entity at byte offset ${last.entityByteOffset}`,
     );
   }
 
@@ -1953,7 +1872,7 @@ export function decodeHtmlEntity(text: Uint8Array, pos: number) {
       }
     }
     if (res === 0 || res >= 0x10ffff || endPos - pos >= 10) {
-      return 0;
+      return;
     }
   } else {
     while (isAlpha(text[endPos])) {
@@ -1969,7 +1888,7 @@ export function decodeHtmlEntity(text: Uint8Array, pos: number) {
     } else if (areTypedArraysEqual(entity, "quot")) {
       res = CODEPOINTS['"'];
     } else {
-      return 0;
+      return;
     }
   }
 
@@ -2016,7 +1935,7 @@ export function parseHtml(str: Uint8Array) {
     const c = text[i];
     if (c != null && c === CODEPOINTS["&"]) {
       const code = decodeHtmlEntity(str, i);
-      if (code !== 0) {
+      if (code != null) {
         i = code.pos;
         i--;
         utf16Offset += 1 + (code.res > 0xffff ? 1 : 0);
@@ -2103,7 +2022,7 @@ export function parseHtml(str: Uint8Array) {
           while (text[i] !== endCharacter && text[i] !== 0 && text[i] != null) {
             if (text[i] === CODEPOINTS["&"]) {
               const code = decodeHtmlEntity(str, i);
-              if (code !== 0) {
+              if (code != null) {
                 i = code.pos;
                 attributeEnd = appendUtf8CharacterUnsafe(str, attributeEnd, code.res);
                 continue;
@@ -2170,33 +2089,35 @@ export function parseHtml(str: Uint8Array) {
         const entityOffset = nestedEntities.at(-1)!.entityOffset;
         const entityLength = utf16Offset - entityOffset;
         if (areTypedArraysEqual(tagName, "i") || areTypedArraysEqual(tagName, "em")) {
-          entities.push({ type: "italic", offset: entityOffset, length: entityLength });
+          entities.push(new MessageEntity(MessageEntityType.Italic, entityOffset, entityLength));
         } else if (areTypedArraysEqual(tagName, "b") || areTypedArraysEqual(tagName, "strong")) {
-          entities.push({ type: "bold", offset: entityOffset, length: entityLength });
+          entities.push(new MessageEntity(MessageEntityType.Bold, entityOffset, entityLength));
         } else if (
           areTypedArraysEqual(tagName, "s") || areTypedArraysEqual(tagName, "strike") ||
           areTypedArraysEqual(tagName, "del")
         ) {
-          entities.push({ type: "strikethrough", offset: entityOffset, length: entityLength });
+          entities.push(new MessageEntity(MessageEntityType.Strikethrough, entityOffset, entityLength));
         } else if (areTypedArraysEqual(tagName, "u") || areTypedArraysEqual(tagName, "ins")) {
-          entities.push({ type: "underline", offset: entityOffset, length: entityLength });
+          entities.push(new MessageEntity(MessageEntityType.Underline, entityOffset, entityLength));
         } else if (
           areTypedArraysEqual(tagName, "tg-spoiler") ||
           (areTypedArraysEqual(tagName, "span") && areTypedArraysEqual(nestedEntities.at(-1)!.argument, "spoiler"))
         ) {
-          entities.push({ type: "spoiler", offset: entityOffset, length: entityLength });
+          entities.push(new MessageEntity(MessageEntityType.Spoiler, entityOffset, entityLength));
         } else if (areTypedArraysEqual(tagName, "tg-emoji")) {
           const documentId = toInteger(nestedEntities.at(-1)!.argument);
           const rDocumentId = BigInt(isNaN(documentId) ? 0 : documentId);
           if (rDocumentId === 0n) {
             throw new Error("Invalid custom emoji identifier specified");
           }
-          entities.push({
-            type: "custom_emoji",
-            offset: entityOffset,
-            length: entityLength,
-            custom_emoji_id: new CustomEmojiId(rDocumentId),
-          });
+          entities.push(
+            new MessageEntity(
+              MessageEntityType.CustomEmoji,
+              entityOffset,
+              entityLength,
+              new CustomEmojiId(rDocumentId),
+            ),
+          );
         } else if (areTypedArraysEqual(tagName, "a")) {
           let url = nestedEntities.at(-1)!.argument;
           if (url.length === 0) {
@@ -2204,42 +2125,34 @@ export function parseHtml(str: Uint8Array) {
           }
           const userId = LinkManager.getLinkUserId(url);
           if (userId.isValid()) {
-            entities.push({ type: "text_mention", offset: entityOffset, length: entityLength, user_id: userId });
+            entities.push(new MessageEntity(MessageEntityType.MentionName, entityOffset, entityLength, userId));
           } else {
             url = LinkManager.getCheckedLink(url);
             if (url.length !== 0) {
-              entities.push({ type: "text_link", offset: entityOffset, length: entityLength, url });
+              entities.push(new MessageEntity(MessageEntityType.TextUrl, entityOffset, entityLength, url));
             }
           }
         } else if (areTypedArraysEqual(tagName, "pre")) {
           const last = entities[entities.length - 1];
           if (
-            entities.length !== 0 && last.type === "code" && last.offset === entityOffset &&
-            last.length === entityLength && "language" in last && last.language != null &&
-            (last.language as Uint8Array).length !== 0
+            entities.length !== 0 && last.type === MessageEntityType.Code && last.offset === entityOffset &&
+            last.length === entityLength && last.argument.length !== 0
           ) {
-            entities[entities.length - 1].type = "pre_code";
+            entities[entities.length - 1].type = MessageEntityType.PreCode;
           } else {
-            entities.push({ type: "pre", offset: entityOffset, length: entityLength });
+            entities.push(new MessageEntity(MessageEntityType.Pre, entityOffset, entityLength));
           }
         } else if (areTypedArraysEqual(tagName, "code")) {
           const last = entities[entities.length - 1];
           const lastNested = nestedEntities[nestedEntities.length - 1];
           if (
-            entities.length !== 0 && last.type === "pre" && last.offset === entityOffset &&
+            entities.length !== 0 && last.type === MessageEntityType.Pre && last.offset === entityOffset &&
             last.length === entityLength && lastNested.argument.length !== 0
           ) {
-            entities[entities.length - 1].type = "pre_code";
-            (entities[entities.length - 1] as MessageEntity.PreCodeMessageEntity).language = lastNested.argument;
+            entities[entities.length - 1].type = MessageEntityType.PreCode;
+            entities[entities.length - 1].argument = lastNested.argument;
           } else {
-            const language = nestedEntities.at(-1)?.argument;
-            entities.push({
-              type: "code",
-              offset: entityOffset,
-              length: entityLength,
-              // @ts-ignore This is how it is.
-              ...((language == null || language.length === 0) ? {} : { language: nestedEntities.at(-1)?.argument }),
-            });
+            entities.push(new MessageEntity(MessageEntityType.Code, entityOffset, entityLength, lastNested.argument));
           }
         } else {
           UNREACHABLE();
@@ -2254,8 +2167,8 @@ export function parseHtml(str: Uint8Array) {
   }
 
   for (const entity of entities) {
-    if (entity.type === "code" && "language" in entity && (entity.language as Uint8Array).length !== 0) {
-      delete entity.language;
+    if (entity.type === MessageEntityType.Code && entity.argument.length !== 0) {
+      entity.argument = new Uint8Array();
     }
   }
 

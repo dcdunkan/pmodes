@@ -14,7 +14,7 @@ import {
   parseHtml,
   parseMarkdownV2,
 } from "./match.ts";
-import { MessageEntity } from "./types.ts";
+import { MessageEntity, MessageEntityType } from "./message_entity.ts";
 import { UserId } from "./user_id.ts";
 
 function checkFn(fn: (text: Uint8Array) => [number, number][]) {
@@ -46,21 +46,7 @@ Deno.test("mentions", () => {
   check("нет@mention", []);
   check(
     "@ya @gif @wiki @vid @bing @pic @bold @imdb @ImDb @coub @like @vote @giff @cap ya cap @y @yar @bingg @bin",
-    [
-      "@gif",
-      "@wiki",
-      "@vid",
-      "@bing",
-      "@pic",
-      "@bold",
-      "@imdb",
-      "@ImDb",
-      "@coub",
-      "@like",
-      "@vote",
-      "@giff",
-      "@bingg",
-    ],
+    ["@gif", "@wiki", "@vid", "@bing", "@pic", "@bold", "@imdb", "@ImDb", "@coub", "@like", "@vote", "@giff", "@bingg"],
   );
 });
 
@@ -199,22 +185,13 @@ Deno.test("media timestamps", () => {
   check("1:1:01 1:1:1", [["1:1:01", 3661]]);
   check(
     "0:0:00 00:00 000:00 0000:00 00000:00 00:00:00 000:00:00 00:000:00 00:00:000",
-    [["0:0:00", 0], ["00:00", 0], ["000:00", 0], ["0000:00", 0], [
-      "00:00:00",
-      0,
-    ]],
+    [["0:0:00", 0], ["00:00", 0], ["000:00", 0], ["0000:00", 0], ["00:00:00", 0]],
   );
-  check("00:0:00 0:00:00 00::00 :00:00 00:00: 00:00:0 00:00:", [
-    ["00:0:00", 0],
-    ["0:00:00", 0],
-  ]);
+  check("00:0:00 0:00:00 00::00 :00:00 00:00: 00:00:0 00:00:", [["00:0:00", 0], ["0:00:00", 0]]);
   check("1:1:59 1:1:-1 1:1:60", [["1:1:59", 3719]]);
   check("1:59:00 1:-1:00 1:60:00", [["1:59:00", 7140], ["1:00", 60]]);
   check("59:59 60:00", [["59:59", 3599], ["60:00", 3600]]);
-  check("9999:59 99:59:59 99:60:59", [["9999:59", 599999], [
-    "99:59:59",
-    360000 - 1,
-  ]]);
+  check("9999:59 99:59:59 99:60:59", [["9999:59", 599999], ["99:59:59", 360000 - 1]]);
   check("2001:db8::8a2e:f70:13a4", []);
 });
 
@@ -510,7 +487,7 @@ Deno.test("url", () => {
     [],
   );
   check("http://  .com", []);
-  check("URL:     .com", []);
+  check("    .com", []);
   check("URL: .com", []);
   check(".com", []);
   check("http://  .", []);
@@ -604,7 +581,7 @@ Deno.test("url", () => {
       "link.\n\n➡️.ws/" +
       "䨹\n\nabcdefghijklmnopqrstuvwxyz0123456789qwe_sdfsdf.aweawe-sdfs.com\nwww.🤙.tk:1\ngoogle.com:" +
       "᪉᪉᪉᪉\ngoogle." +
-      "com:᪀᪀\nhttp://  .com\nURL:     .com\nURL: " +
+      "com:᪀᪀\nhttp://  .com\n    .com\n" +
       ".com\n\ngoogle.com?qwe\ngoogle.com#qwe\ngoogle.com/?\ngoogle.com/#\ngoogle.com?\ngoogle.com#\n",
     [
       "a.b.google.com",
@@ -801,104 +778,133 @@ Deno.test("parse markdown v2", () => {
   check("\\\\\\\\\\_\\*\\`", "\\\\_*`", []);
   check("➡️ ➡️", "➡️ ➡️", []);
   check("🏟 🏟``", "🏟 🏟", []);
-  check("🏟 🏟_abac \\* asd _", "🏟 🏟abac * asd ", [{ type: "italic", offset: 5, length: 11 }]);
-  check("🏟 \\.🏟_🏟\\. 🏟_", "🏟 .🏟🏟. 🏟", [{ type: "italic", offset: 6, length: 6 }]);
+  check("🏟 🏟_abac \\* asd _", "🏟 🏟abac * asd ", [new MessageEntity(MessageEntityType.Italic, 5, 11)]);
+  check("🏟 \\.🏟_🏟\\. 🏟_", "🏟 .🏟🏟. 🏟", [new MessageEntity(MessageEntityType.Italic, 6, 6)]);
   check("\\\\\\a\\b\\c\\d\\e\\f\\1\\2\\3\\4\\➡️\\", "\\abcdef1234\\➡️\\", []);
-  check("➡️ ➡️_➡️ ➡️_", "➡️ ➡️➡️ ➡️", [{ type: "italic", offset: 5, length: 5 }]);
-  check("➡️ ➡️_➡️ ➡️_*➡️ ➡️*", "➡️ ➡️➡️ ➡️➡️ ➡️", [{ type: "italic", offset: 5, length: 5 }, {
-    type: "bold",
-    offset: 10,
-    length: 5,
-  }]);
-  check("🏟 🏟_🏟 \\.🏟_", "🏟 🏟🏟 .🏟", [{ type: "italic", offset: 5, length: 6 }]);
-  check("🏟 🏟_🏟 *🏟*_", "🏟 🏟🏟 🏟", [{ type: "italic", offset: 5, length: 5 }, { type: "bold", offset: 8, length: 2 }]);
-  check("🏟 🏟_🏟 __🏟___", "🏟 🏟🏟 🏟", [{ type: "italic", offset: 5, length: 5 }, {
-    type: "underline",
-    offset: 8,
-    length: 2,
-  }]);
-  check("🏟 🏟__🏟 _🏟_ __", "🏟 🏟🏟 🏟 ", [{ type: "underline", offset: 5, length: 6 }, {
-    type: "italic",
-    offset: 8,
-    length: 2,
-  }]);
-  check("🏟 🏟__🏟 _🏟_\\___", "🏟 🏟🏟 🏟_", [{ type: "underline", offset: 5, length: 6 }, {
-    type: "italic",
-    offset: 8,
-    length: 2,
-  }]);
-  check("🏟 🏟`🏟 🏟```", "🏟 🏟🏟 🏟", [{ type: "code", offset: 5, length: 5 }]);
-  check("🏟 🏟```🏟 🏟```", "🏟 🏟 🏟", [{ type: "pre_code", offset: 5, length: 3, language: encode("🏟") }]);
-  check("🏟 🏟```🏟\n🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: encode("🏟") }]);
-  check("🏟 🏟```🏟\r🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: encode("🏟") }]);
-  check("🏟 🏟```🏟\n\r🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: encode("🏟") }]);
-  check("🏟 🏟```🏟\r\n🏟```", "🏟 🏟🏟", [{ type: "pre_code", offset: 5, length: 2, language: encode("🏟") }]);
-  check("🏟 🏟```🏟\n\n🏟```", "🏟 🏟\n🏟", [{ type: "pre_code", offset: 5, length: 3, language: encode("🏟") }]);
-  check("🏟 🏟```🏟\r\r🏟```", "🏟 🏟\r🏟", [{ type: "pre_code", offset: 5, length: 3, language: encode("🏟") }]);
-  check("🏟 🏟```🏟 \\\\\\`🏟```", "🏟 🏟 \\`🏟", [{ type: "pre_code", offset: 5, length: 5, language: encode("🏟") }]);
+  check("➡️ ➡️_➡️ ➡️_", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Italic, 5, 5)]);
+  check("➡️ ➡️_➡️ ➡️_*➡️ ➡️*", "➡️ ➡️➡️ ➡️➡️ ➡️", [
+    new MessageEntity(MessageEntityType.Italic, 5, 5),
+    new MessageEntity(
+      MessageEntityType.Bold,
+      10,
+      5,
+    ),
+  ]);
+  check("🏟 🏟_🏟 \\.🏟_", "🏟 🏟🏟 .🏟", [new MessageEntity(MessageEntityType.Italic, 5, 6)]);
+  check("🏟 🏟_🏟 *🏟*_", "🏟 🏟🏟 🏟", [
+    new MessageEntity(MessageEntityType.Italic, 5, 5),
+    new MessageEntity(MessageEntityType.Bold, 8, 2),
+  ]);
+  check("🏟 🏟_🏟 __🏟___", "🏟 🏟🏟 🏟", [
+    new MessageEntity(MessageEntityType.Italic, 5, 5),
+    new MessageEntity(
+      MessageEntityType.Underline,
+      8,
+      2,
+    ),
+  ]);
+  check("🏟 🏟__🏟 _🏟_ __", "🏟 🏟🏟 🏟 ", [
+    new MessageEntity(MessageEntityType.Underline, 5, 6),
+    new MessageEntity(
+      MessageEntityType.Italic,
+      8,
+      2,
+    ),
+  ]);
+  check("🏟 🏟__🏟 _🏟_\\___", "🏟 🏟🏟 🏟_", [
+    new MessageEntity(MessageEntityType.Underline, 5, 6),
+    new MessageEntity(
+      MessageEntityType.Italic,
+      8,
+      2,
+    ),
+  ]);
+  check("🏟 🏟`🏟 🏟```", "🏟 🏟🏟 🏟", [new MessageEntity(MessageEntityType.Code, 5, 5)]);
+  check("🏟 🏟```🏟 🏟```", "🏟 🏟 🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
+  check("🏟 🏟```🏟\n🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
+  check("🏟 🏟```🏟\r🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
+  check("🏟 🏟```🏟\n\r🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
+  check("🏟 🏟```🏟\r\n🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
+  check("🏟 🏟```🏟\n\n🏟```", "🏟 🏟\n🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
+  check("🏟 🏟```🏟\r\r🏟```", "🏟 🏟\r🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
+  check("🏟 🏟```🏟 \\\\\\`🏟```", "🏟 🏟 \\`🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 5, encode("🏟"))]);
   check("🏟 🏟**", "🏟 🏟", []);
-  check("||test||", "test", [{ type: "spoiler", offset: 0, length: 4 }]);
+  check("||test||", "test", [new MessageEntity(MessageEntityType.Spoiler, 0, 4)]);
   check("🏟 🏟``", "🏟 🏟", []);
   check("🏟 🏟``````", "🏟 🏟", []);
   check("🏟 🏟____", "🏟 🏟", []);
   check("`_* *_`__*` `*__", "_* *_ ", [
-    { type: "code", offset: 0, length: 5 },
-    { type: "code", offset: 5, length: 1 },
-    { type: "bold", offset: 5, length: 1 },
-    { type: "underline", offset: 5, length: 1 },
+    new MessageEntity(MessageEntityType.Code, 0, 5),
+    new MessageEntity(MessageEntityType.Code, 5, 1),
+    new MessageEntity(MessageEntityType.Bold, 5, 1),
+    new MessageEntity(MessageEntityType.Underline, 5, 1),
   ]);
   check("_* * ` `_", "   ", [
-    { type: "italic", offset: 0, length: 3 },
-    { type: "bold", offset: 0, length: 1 },
-    { type: "code", offset: 2, length: 1 },
+    new MessageEntity(MessageEntityType.Italic, 0, 3),
+    new MessageEntity(MessageEntityType.Bold, 0, 1),
+    new MessageEntity(MessageEntityType.Code, 2, 1),
   ]);
   check("[](telegram.org)", "", []);
-  check("[ ](telegram.org)", " ", [{ type: "text_link", offset: 0, length: 1, url: encode("http://telegram.org/") }]);
+  check("[ ](telegram.org)", " ", [new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/"))]);
   check("[ ](as)", " ", []);
-  check("[telegram\\.org]", "telegram.org", [{
-    type: "text_link",
-    offset: 0,
-    length: 12,
-    url: encode("http://telegram.org/"),
-  }]);
-  check("[telegram\\.org]a", "telegram.orga", [{
-    type: "text_link",
-    offset: 0,
-    length: 12,
-    url: encode("http://telegram.org/"),
-  }]);
-  check("[telegram\\.org](telegram.dog)", "telegram.org", [{
-    type: "text_link",
-    offset: 0,
-    length: 12,
-    url: encode("http://telegram.dog/"),
-  }]);
-  check("[telegram\\.org](https://telegram.dog?)", "telegram.org", [{
-    type: "text_link",
-    offset: 0,
-    length: 12,
-    url: encode("https://telegram.dog/?"),
-  }]);
-  check("[telegram\\.org](https://telegram.dog?\\\\\\()", "telegram.org", [{
-    type: "text_link",
-    offset: 0,
-    length: 12,
-    url: encode("https://telegram.dog/?\\("),
-  }]);
+  check("[telegram\\.org]", "telegram.org", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      12,
+      encode("http://telegram.org/"),
+    ),
+  ]);
+  check("[telegram\\.org]a", "telegram.orga", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      12,
+      encode("http://telegram.org/"),
+    ),
+  ]);
+  check("[telegram\\.org](telegram.dog)", "telegram.org", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      12,
+      encode("http://telegram.dog/"),
+    ),
+  ]);
+  check("[telegram\\.org](https://telegram.dog?)", "telegram.org", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      12,
+      encode("https://telegram.dog/?"),
+    ),
+  ]);
+  check("[telegram\\.org](https://telegram.dog?\\\\\\()", "telegram.org", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      12,
+      encode("https://telegram.dog/?\\("),
+    ),
+  ]);
   check("[telegram\\.org]()", "telegram.org", []);
   check("[telegram\\.org](asdasd)", "telegram.org", []);
-  check("[telegram\\.org](tg:user?id=123456)", "telegram.org", [{
-    type: "text_mention",
-    offset: 0,
-    length: 12,
-    user_id: new UserId(123456n),
-  }]);
-  check("🏟 🏟![👍](TG://EMoJI/?test=1231&id=25#id=32)a", "🏟 🏟👍a", [{
-    type: "custom_emoji",
-    offset: 5,
-    length: 2,
-    custom_emoji_id: new CustomEmojiId(25n),
-  }]);
+  check("[telegram\\.org](tg:user?id=123456)", "telegram.org", [
+    new MessageEntity(
+      MessageEntityType.MentionName,
+      0,
+      12,
+      new UserId(123456n),
+    ),
+  ]);
+  check("🏟 🏟![👍](TG://EMoJI/?test=1231&id=25#id=32)a", "🏟 🏟👍a", [
+    new MessageEntity(
+      MessageEntityType.CustomEmoji,
+      5,
+      2,
+      new CustomEmojiId(25n),
+    ),
+  ]);
 });
 
 Deno.test("parse html", () => {
@@ -945,153 +951,169 @@ Deno.test("parse html", () => {
   check("➡️ ➡️", "➡️ ➡️", []);
   check("&ge;&lt;&gt;&amp;&quot;&laquo;&raquo;&#12345678;", '&ge;<>&"&laquo;&raquo;&#12345678;', []);
   check("&Or;", "&Or;", []);
-  check("➡️ ➡️<i>➡️ ➡️</i>", "➡️ ➡️➡️ ➡️", [{ type: "italic", offset: 5, length: 5 }]);
-  check("➡️ ➡️<em>➡️ ➡️</em>", "➡️ ➡️➡️ ➡️", [{ type: "italic", offset: 5, length: 5 }]);
-  check("➡️ ➡️<b>➡️ ➡️</b>", "➡️ ➡️➡️ ➡️", [{ type: "bold", offset: 5, length: 5 }]);
-  check("➡️ ➡️<strong>➡️ ➡️</strong>", "➡️ ➡️➡️ ➡️", [{ type: "bold", offset: 5, length: 5 }]);
-  check("➡️ ➡️<u>➡️ ➡️</u>", "➡️ ➡️➡️ ➡️", [{ type: "underline", offset: 5, length: 5 }]);
-  check("➡️ ➡️<ins>➡️ ➡️</ins>", "➡️ ➡️➡️ ➡️", [{ type: "underline", offset: 5, length: 5 }]);
-  check("➡️ ➡️<s>➡️ ➡️</s>", "➡️ ➡️➡️ ➡️", [{ type: "strikethrough", offset: 5, length: 5 }]);
-  check("➡️ ➡️<strike>➡️ ➡️</strike>", "➡️ ➡️➡️ ➡️", [{ type: "strikethrough", offset: 5, length: 5 }]);
-  check("➡️ ➡️<del>➡️ ➡️</del>", "➡️ ➡️➡️ ➡️", [{ type: "strikethrough", offset: 5, length: 5 }]);
+  check("➡️ ➡️<i>➡️ ➡️</i>", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Italic, 5, 5)]);
+  check("➡️ ➡️<em>➡️ ➡️</em>", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Italic, 5, 5)]);
+  check("➡️ ➡️<b>➡️ ➡️</b>", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Bold, 5, 5)]);
+  check("➡️ ➡️<strong>➡️ ➡️</strong>", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Bold, 5, 5)]);
+  check("➡️ ➡️<u>➡️ ➡️</u>", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Underline, 5, 5)]);
+  check("➡️ ➡️<ins>➡️ ➡️</ins>", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Underline, 5, 5)]);
+  check("➡️ ➡️<s>➡️ ➡️</s>", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Strikethrough, 5, 5)]);
+  check("➡️ ➡️<strike>➡️ ➡️</strike>", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Strikethrough, 5, 5)]);
+  check("➡️ ➡️<del>➡️ ➡️</del>", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Strikethrough, 5, 5)]);
   check("➡️ ➡️<i>➡️ ➡️</i><b>➡️ ➡️</b>", "➡️ ➡️➡️ ➡️➡️ ➡️", [
-    { type: "italic", offset: 5, length: 5 },
-    { type: "bold", offset: 10, length: 5 },
+    new MessageEntity(MessageEntityType.Italic, 5, 5),
+    new MessageEntity(MessageEntityType.Bold, 10, 5),
   ]);
-  check("🏟 🏟<i>🏟 &lt🏟</i>", "🏟 🏟🏟 <🏟", [{ type: "italic", offset: 5, length: 6 }]);
+  check("🏟 🏟<i>🏟 &lt🏟</i>", "🏟 🏟🏟 <🏟", [new MessageEntity(MessageEntityType.Italic, 5, 6)]);
   check("🏟 🏟<i>🏟 &gt;<b aba   =   caba>&lt🏟</b></i>", "🏟 🏟🏟 ><🏟", [
-    { type: "italic", offset: 5, length: 7 },
-    { type: "bold", offset: 9, length: 3 },
+    new MessageEntity(MessageEntityType.Italic, 5, 7),
+    new MessageEntity(MessageEntityType.Bold, 9, 3),
   ]);
-  check("🏟 🏟&lt;<i    aba  =  190azAz-.   >a</i>", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
-  check("🏟 🏟&lt;<i    aba  =  190azAz-.>a</i>", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
-  check('🏟 🏟&lt;<i    aba  =  "&lt;&gt;&quot;">a</i>', "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
-  check("🏟 🏟&lt;<i    aba  =  '&lt;&gt;&quot;'>a</i>", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
-  check("🏟 🏟&lt;<i    aba  =  '&lt;&gt;&quot;'>a</>", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
-  check("🏟 🏟&lt;<i>🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [{ type: "italic", offset: 6, length: 6 }]);
-  check("🏟 🏟&lt;<i>a</    >", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
-  check("🏟 🏟&lt;<i>a</i   >", "🏟 🏟<a", [{ type: "italic", offset: 6, length: 1 }]);
+  check("🏟 🏟&lt;<i    aba  =  190azAz-.   >a</i>", "🏟 🏟<a", [new MessageEntity(MessageEntityType.Italic, 6, 1)]);
+  check("🏟 🏟&lt;<i    aba  =  190azAz-.>a</i>", "🏟 🏟<a", [new MessageEntity(MessageEntityType.Italic, 6, 1)]);
+  check('🏟 🏟&lt;<i    aba  =  "&lt;&gt;&quot;">a</i>', "🏟 🏟<a", [new MessageEntity(MessageEntityType.Italic, 6, 1)]);
+  check("🏟 🏟&lt;<i    aba  =  '&lt;&gt;&quot;'>a</i>", "🏟 🏟<a", [new MessageEntity(MessageEntityType.Italic, 6, 1)]);
+  check("🏟 🏟&lt;<i    aba  =  '&lt;&gt;&quot;'>a</>", "🏟 🏟<a", [new MessageEntity(MessageEntityType.Italic, 6, 1)]);
+  check("🏟 🏟&lt;<i>🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [new MessageEntity(MessageEntityType.Italic, 6, 6)]);
+  check("🏟 🏟&lt;<i>a</    >", "🏟 🏟<a", [new MessageEntity(MessageEntityType.Italic, 6, 1)]);
+  check("🏟 🏟&lt;<i>a</i   >", "🏟 🏟<a", [new MessageEntity(MessageEntityType.Italic, 6, 1)]);
   check("🏟 🏟&lt;<b></b>", "🏟 🏟<", []);
-  check("<i>\t</i>", "\t", [{ type: "italic", offset: 0, length: 1 }]);
-  check("<i>\r</i>", "\r", [{ type: "italic", offset: 0, length: 1 }]);
-  check("<i>\n</i>", "\n", [{ type: "italic", offset: 0, length: 1 }]);
+  check("<i>\t</i>", "\t", [new MessageEntity(MessageEntityType.Italic, 0, 1)]);
+  check("<i>\r</i>", "\r", [new MessageEntity(MessageEntityType.Italic, 0, 1)]);
+  check("<i>\n</i>", "\n", [new MessageEntity(MessageEntityType.Italic, 0, 1)]);
   check('➡️ ➡️<span class = "tg-spoiler">➡️ ➡️</span><b>➡️ ➡️</b>', "➡️ ➡️➡️ ➡️➡️ ➡️", [
-    { type: "spoiler", offset: 5, length: 5 },
-    { type: "bold", offset: 10, length: 5 },
+    new MessageEntity(MessageEntityType.Spoiler, 5, 5),
+    new MessageEntity(MessageEntityType.Bold, 10, 5),
   ]);
-  check('🏟 🏟<span class="tg-spoiler">🏟 &lt🏟</span>', "🏟 🏟🏟 <🏟", [{ type: "spoiler", offset: 5, length: 6 }]);
+  check('🏟 🏟<span class="tg-spoiler">🏟 &lt🏟</span>', "🏟 🏟🏟 <🏟", [new MessageEntity(MessageEntityType.Spoiler, 5, 6)]);
   check('🏟 🏟<span class="tg-spoiler">🏟 &gt;<b aba   =   caba>&lt🏟</b></span>', "🏟 🏟🏟 ><🏟", [
-    { type: "spoiler", offset: 5, length: 7 },
-    { type: "bold", offset: 9, length: 3 },
+    new MessageEntity(MessageEntityType.Spoiler, 5, 7),
+    new MessageEntity(MessageEntityType.Bold, 9, 3),
   ]);
   check("➡️ ➡️<tg-spoiler>➡️ ➡️</tg-spoiler><b>➡️ ➡️</b>", "➡️ ➡️➡️ ➡️➡️ ➡️", [
-    { type: "spoiler", offset: 5, length: 5 },
-    { type: "bold", offset: 10, length: 5 },
+    new MessageEntity(MessageEntityType.Spoiler, 5, 5),
+    new MessageEntity(MessageEntityType.Bold, 10, 5),
   ]);
-  check("🏟 🏟<tg-spoiler>🏟 &lt🏟</tg-spoiler>", "🏟 🏟🏟 <🏟", [{ type: "spoiler", offset: 5, length: 6 }]);
+  check("🏟 🏟<tg-spoiler>🏟 &lt🏟</tg-spoiler>", "🏟 🏟🏟 <🏟", [new MessageEntity(MessageEntityType.Spoiler, 5, 6)]);
   check("🏟 🏟<tg-spoiler>🏟 &gt;<b aba   =   caba>&lt🏟</b></tg-spoiler>", "🏟 🏟🏟 ><🏟", [
-    { type: "spoiler", offset: 5, length: 7 },
-    { type: "bold", offset: 9, length: 3 },
+    new MessageEntity(MessageEntityType.Spoiler, 5, 7),
+    new MessageEntity(MessageEntityType.Bold, 9, 3),
   ]);
-  check("<a href=telegram.org>\t</a>", "\t", [{
-    type: "text_link",
-    offset: 0,
-    length: 1,
-    url: encode("http://telegram.org/"),
-  }]);
-  check("<a href=telegram.org>\r</a>", "\r", [{
-    type: "text_link",
-    offset: 0,
-    length: 1,
-    url: encode("http://telegram.org/"),
-  }]);
-  check("<a href=telegram.org>\n</a>", "\n", [{
-    type: "text_link",
-    offset: 0,
-    length: 1,
-    url: encode("http://telegram.org/"),
-  }]);
+  check("<a href=telegram.org>\t</a>", "\t", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      1,
+      encode("http://telegram.org/"),
+    ),
+  ]);
+  check("<a href=telegram.org>\r</a>", "\r", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      1,
+      encode("http://telegram.org/"),
+    ),
+  ]);
+  check("<a href=telegram.org>\n</a>", "\n", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      1,
+      encode("http://telegram.org/"),
+    ),
+  ]);
   check("<code><i><b> </b></i></code><i><b><code> </code></b></i>", "  ", [
-    { type: "code", offset: 0, length: 1 },
-    { type: "bold", offset: 0, length: 1 },
-    { type: "italic", offset: 0, length: 1 },
-    { type: "code", offset: 1, length: 1 },
-    { type: "bold", offset: 1, length: 1 },
-    { type: "italic", offset: 1, length: 1 },
+    new MessageEntity(MessageEntityType.Code, 0, 1),
+    new MessageEntity(MessageEntityType.Bold, 0, 1),
+    new MessageEntity(MessageEntityType.Italic, 0, 1),
+    new MessageEntity(MessageEntityType.Code, 1, 1),
+    new MessageEntity(MessageEntityType.Bold, 1, 1),
+    new MessageEntity(MessageEntityType.Italic, 1, 1),
   ]);
   check("<i><b> </b> <code> </code></i>", "   ", [
-    { type: "italic", offset: 0, length: 3 },
-    { type: "bold", offset: 0, length: 1 },
-    { type: "code", offset: 2, length: 1 },
+    new MessageEntity(MessageEntityType.Italic, 0, 3),
+    new MessageEntity(MessageEntityType.Bold, 0, 1),
+    new MessageEntity(MessageEntityType.Code, 2, 1),
   ]);
-  check("<a href=telegram.org> </a>", " ", [{
-    type: "text_link",
-    offset: 0,
-    length: 1,
-    url: encode("http://telegram.org/"),
-  }]);
-  check('<a href  ="telegram.org"   > </a>', " ", [{
-    type: "text_link",
-    offset: 0,
-    length: 1,
-    url: encode("http://telegram.org/"),
-  }]);
-  check("<a   href=  'telegram.org'   > </a>", " ", [{
-    type: "text_link",
-    offset: 0,
-    length: 1,
-    url: encode("http://telegram.org/"),
-  }]);
-  check("<a   href=  'telegram.org?&lt;'   > </a>", " ", [{
-    type: "text_link",
-    offset: 0,
-    length: 1,
-    url: encode("http://telegram.org/?<"),
-  }]);
+  check("<a href=telegram.org> </a>", " ", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      1,
+      encode("http://telegram.org/"),
+    ),
+  ]);
+  check('<a href  ="telegram.org"   > </a>', " ", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      1,
+      encode("http://telegram.org/"),
+    ),
+  ]);
+  check("<a   href=  'telegram.org'   > </a>", " ", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      1,
+      encode("http://telegram.org/"),
+    ),
+  ]);
+  check("<a   href=  'telegram.org?&lt;'   > </a>", " ", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      1,
+      encode("http://telegram.org/?<"),
+    ),
+  ]);
   check("<a> </a>", " ", []);
   check("<a>telegram.org </a>", "telegram.org ", []);
-  check("<a>telegram.org</a>", "telegram.org", [{
-    type: "text_link",
-    offset: 0,
-    length: 12,
-    url: encode("http://telegram.org/"),
-  }]);
-  check("<a>https://telegram.org/asdsa?asdasdwe#12e3we</a>", "https://telegram.org/asdsa?asdasdwe#12e3we", [
-    { type: "text_link", offset: 0, length: 42, url: encode("https://telegram.org/asdsa?asdasdwe#12e3we") },
+  check("<a>telegram.org</a>", "telegram.org", [
+    new MessageEntity(
+      MessageEntityType.TextUrl,
+      0,
+      12,
+      encode("http://telegram.org/"),
+    ),
   ]);
-  check("🏟 🏟&lt;<pre  >🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [{ type: "pre", offset: 6, length: 6 }]);
-  check("🏟 🏟&lt;<code >🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [{ type: "code", offset: 6, length: 6 }]);
+  check("<a>https://telegram.org/asdsa?asdasdwe#12e3we</a>", "https://telegram.org/asdsa?asdasdwe#12e3we", [
+    new MessageEntity(MessageEntityType.TextUrl, 0, 42, encode("https://telegram.org/asdsa?asdasdwe#12e3we")),
+  ]);
+  check("🏟 🏟&lt;<pre  >🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [new MessageEntity(MessageEntityType.Pre, 6, 6)]);
+  check("🏟 🏟&lt;<code >🏟 🏟&lt;</>", "🏟 🏟<🏟 🏟<", [new MessageEntity(MessageEntityType.Code, 6, 6)]);
   check("🏟 🏟&lt;<pre><code>🏟 🏟&lt;</code></>", "🏟 🏟<🏟 🏟<", [
-    { type: "pre", offset: 6, length: 6 },
-    { type: "code", offset: 6, length: 6 },
+    new MessageEntity(MessageEntityType.Pre, 6, 6),
+    new MessageEntity(MessageEntityType.Code, 6, 6),
   ]);
   check('🏟 🏟&lt;<pre><code class="language-">🏟 🏟&lt;</code></>', "🏟 🏟<🏟 🏟<", [
-    { type: "pre", offset: 6, length: 6 },
-    { type: "code", offset: 6, length: 6 },
+    new MessageEntity(MessageEntityType.Pre, 6, 6),
+    new MessageEntity(MessageEntityType.Code, 6, 6),
   ]);
   check('🏟 🏟&lt;<pre><code class="language-fift">🏟 🏟&lt;</></>', "🏟 🏟<🏟 🏟<", [
-    { type: "pre_code", offset: 6, length: 6, language: encode("fift") },
+    new MessageEntity(MessageEntityType.PreCode, 6, 6, encode("fift")),
   ]);
   check('🏟 🏟&lt;<code class="language-fift"><pre>🏟 🏟&lt;</></>', "🏟 🏟<🏟 🏟<", [
-    { type: "pre_code", offset: 6, length: 6, language: encode("fift") },
+    new MessageEntity(MessageEntityType.PreCode, 6, 6, encode("fift")),
   ]);
   check('🏟 🏟&lt;<pre><code class="language-fift">🏟 🏟&lt;</> </>', "🏟 🏟<🏟 🏟< ", [
-    { type: "pre", offset: 6, length: 7 },
-    { type: "code", offset: 6, length: 6 },
+    new MessageEntity(MessageEntityType.Pre, 6, 7),
+    new MessageEntity(MessageEntityType.Code, 6, 6),
   ]);
   check('🏟 🏟&lt;<pre> <code class="language-fift">🏟 🏟&lt;</></>', "🏟 🏟< 🏟 🏟<", [
-    { type: "pre", offset: 6, length: 7 },
-    { type: "code", offset: 7, length: 6 },
+    new MessageEntity(MessageEntityType.Pre, 6, 7),
+    new MessageEntity(MessageEntityType.Code, 7, 6),
   ]);
   check('➡️ ➡️<tg-emoji emoji-id = "12345">➡️ ➡️</tg-emoji><b>➡️ ➡️</b>', "➡️ ➡️➡️ ➡️➡️ ➡️", [
-    { type: "custom_emoji", offset: 5, length: 5, custom_emoji_id: new CustomEmojiId(12345n) },
-    { type: "bold", offset: 10, length: 5 },
+    new MessageEntity(MessageEntityType.CustomEmoji, 5, 5, new CustomEmojiId(12345n)),
+    new MessageEntity(MessageEntityType.Bold, 10, 5),
   ]);
   check('🏟 🏟<tg-emoji emoji-id="54321">🏟 &lt🏟</tg-emoji>', "🏟 🏟🏟 <🏟", [
-    { type: "custom_emoji", offset: 5, length: 6, custom_emoji_id: new CustomEmojiId(54321n) },
+    new MessageEntity(MessageEntityType.CustomEmoji, 5, 6, new CustomEmojiId(54321n)),
   ]);
   check('🏟 🏟<b aba   =   caba><tg-emoji emoji-id="1">🏟</tg-emoji>1</b>', "🏟 🏟🏟1", [
-    { type: "bold", offset: 5, length: 3 },
-    { type: "custom_emoji", offset: 5, length: 2, custom_emoji_id: new CustomEmojiId(1n) },
+    new MessageEntity(MessageEntityType.Bold, 5, 3),
+    new MessageEntity(MessageEntityType.CustomEmoji, 5, 2, new CustomEmojiId(1n)),
   ]);
 });
