@@ -4,7 +4,8 @@
     "lineWidth": 120
   },
   "tasks": {
-    "check": "deno cache --check=all mod.ts",
+    "check": "deno cache --check=all *.ts",
+    "dev": "deno fmt && deno lint && deno task check",
     "test": "deno test --no-check"
   }
 }

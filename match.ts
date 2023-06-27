@@ -40,7 +40,7 @@ import {
 } from "./utf8.ts";
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 import { areTypedArraysEqual, CODEPOINTS, decode, encode, toInteger } from "./encode.ts";
-import { COMMON_TLDS } from "./constants.ts";
+import { BAD_PATH_END_CHARACTERS, COMMON_TLDS } from "./constants.ts";
 
 export type Position = [number, number];
 
@@ -366,13 +366,13 @@ export function matchBankCardNumbers(str: Uint8Array): Position[] {
   return result;
 }
 
-export function isURLUnicodeSymbol(codepoint: number): boolean {
+export function isUrlUnicodeSymbol(codepoint: number): boolean {
   return 0x2000 <= codepoint && codepoint <= 0x206f
     ? codepoint === 0x200c || codepoint === 0x200d || (0x2010 <= codepoint && codepoint <= 0x2015)
     : getUnicodeSimpleCategory(codepoint) !== UnicodeSimpleCategory.Separator;
 }
 
-export function isURLPathSymbol(codepoint: number): boolean {
+export function isUrlPathSymbol(codepoint: number): boolean {
   switch (codepoint) {
     case CODEPOINTS["\n"]:
     case CODEPOINTS["<"]:
@@ -382,11 +382,9 @@ export function isURLPathSymbol(codepoint: number): boolean {
     case 0xbb: // »
       return false;
     default:
-      return isURLUnicodeSymbol(codepoint);
+      return isUrlUnicodeSymbol(codepoint);
   }
 }
-
-const BAD_PATH_END_CHARACTERS = encode(".:;,('?!`");
 
 export function matchTgURLs(str: Uint8Array): Position[] {
   const result: Position[] = [];
@@ -435,7 +433,7 @@ export function matchTgURLs(str: Uint8Array): Position[] {
       let pathEndPos = position + 1;
       while (pathEndPos !== end) {
         const { code, pos: nextPosition } = nextUtf8Unsafe(str, pathEndPos);
-        if (!isURLPathSymbol(code)) {
+        if (!isUrlPathSymbol(code)) {
           break;
         }
         pathEndPos = nextPosition;
@@ -481,14 +479,14 @@ export function isUserDataSymbol(codepoint: number): boolean {
     case 0xbb: // »
       return false;
     default:
-      return isURLUnicodeSymbol(codepoint);
+      return isUrlUnicodeSymbol(codepoint);
   }
 }
 
 export function isDomainSymbol(codepoint: number): boolean {
   return codepoint < 0xc0
     ? codepoint === CODEPOINTS["."] || isAlphaDigitUnderscoreOrMinus(codepoint) || codepoint === CODEPOINTS["~"]
-    : isURLUnicodeSymbol(codepoint);
+    : isUrlUnicodeSymbol(codepoint);
 }
 
 export function matchURLs(str: Uint8Array): Position[] {
@@ -572,7 +570,7 @@ export function matchURLs(str: Uint8Array): Position[] {
       let pathEndPos = urlEndPos + 1;
       while (pathEndPos !== end) {
         const { code, pos: nextPosition } = nextUtf8Unsafe(str, pathEndPos);
-        if (!isURLPathSymbol(code)) {
+        if (!isUrlPathSymbol(code)) {
           break;
         }
         pathEndPos = nextPosition;
@@ -792,7 +790,7 @@ export function isCommonTLD(str: Uint8Array): boolean {
   return COMMON_TLDS.some((tld) => areTypedArraysEqual(tld, strLower));
 }
 
-export function fixURL(str: Uint8Array): Uint8Array {
+export function fixUrl(str: Uint8Array): Uint8Array {
   let fullUrl = str;
 
   let hasProtocol = false;
@@ -956,11 +954,11 @@ export function findBankCardNumbers(str: Uint8Array): Position[] {
   });
 }
 
-export function findTgURLs(str: Uint8Array): Position[] {
+export function findTgUrls(str: Uint8Array): Position[] {
   return matchTgURLs(str);
 }
 
-export function findURLs(str: Uint8Array): [Position, boolean][] {
+export function findUrls(str: Uint8Array): [Position, boolean][] {
   const result: [Position, boolean][] = [];
   for (const [start, end] of matchURLs(str)) {
     let url = str.slice(start, end);
@@ -969,7 +967,7 @@ export function findURLs(str: Uint8Array): [Position, boolean][] {
     } else if (beginsWith(url, "mailto:") && isEmailAddress(url.slice(7))) {
       result.push([[start + 7, start + url.length], true]);
     } else {
-      url = fixURL(url);
+      url = fixUrl(url);
       if (url.length !== 0) {
         result.push([[start, start + url.length], false]);
       }
@@ -1398,9 +1396,9 @@ export function findEntities(
   addEntities(MessageEntityType.Cashtag, findCashtags);
   // TODO: find_phone_numbers.
   addEntities(MessageEntityType.BankCardNumber, findBankCardNumbers);
-  addEntities(MessageEntityType.Url, findTgURLs);
+  addEntities(MessageEntityType.Url, findTgUrls);
 
-  const urls = findURLs(text);
+  const urls = findUrls(text);
   for (const [url, email] of urls) {
     const type = email ? "email" : "url";
     const offset = url[0];
@@ -1938,7 +1936,7 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
   return { text: text.slice(0, resultSize), entities };
 }
 
-export function decodeHTMLEntity(text: Uint8Array, pos: number) {
+export function decodeHtmlEntity(text: Uint8Array, pos: number) {
   CHECK(text[pos] === CODEPOINTS["&"]);
   let endPos = pos + 1;
   let res = 0;
@@ -1996,7 +1994,7 @@ export const TAG_NAMES = [
   "code"
 ];
 
-export function parseHTML(str: Uint8Array) {
+export function parseHtml(str: Uint8Array) {
   const strSize = str.length;
   const text = str;
   let resultEnd = 0;
@@ -2017,7 +2015,7 @@ export function parseHTML(str: Uint8Array) {
   for (let i = 0; i < strSize; i++) {
     const c = text[i];
     if (c != null && c === CODEPOINTS["&"]) {
-      const code = decodeHTMLEntity(str, i);
+      const code = decodeHtmlEntity(str, i);
       if (code !== 0) {
         i = code.pos;
         i--;
@@ -2104,7 +2102,7 @@ export function parseHTML(str: Uint8Array) {
           const attributeBegin = attributeEnd;
           while (text[i] !== endCharacter && text[i] !== 0 && text[i] != null) {
             if (text[i] === CODEPOINTS["&"]) {
-              const code = decodeHTMLEntity(str, i);
+              const code = decodeHtmlEntity(str, i);
               if (code !== 0) {
                 i = code.pos;
                 attributeEnd = appendUTF8CharacterUnsafe(str, attributeEnd, code.res);

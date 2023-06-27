@@ -8,10 +8,10 @@ import {
   findHashtags,
   findMediaTimestamps,
   findMentions,
-  findTgURLs,
-  findURLs,
+  findTgUrls,
+  findUrls,
   isEmailAddress,
-  parseHTML,
+  parseHtml,
   parseMarkdownV2,
 } from "./match.ts";
 import { MessageEntity } from "./types.ts";
@@ -264,7 +264,7 @@ Deno.test("bank card numbers", () => {
 });
 
 Deno.test("tg urls", () => {
-  const check = checkFn(findTgURLs);
+  const check = checkFn(findTgUrls);
   check("", []);
   check("tg://", []);
   check("tg://a", ["tg://a"]);
@@ -445,7 +445,7 @@ Deno.test("url", () => {
     expectedEmailAddresses: string[] = [],
   ) => {
     const encoded = encode(str);
-    const results = findURLs(encoded);
+    const results = findUrls(encoded);
     const actualUrls: string[] = [];
     const actualEmailAddress: string[] = [];
     for (const [[start, end], email] of results) {
@@ -906,13 +906,13 @@ Deno.test("parse html", () => {
     const str = encode(text);
     if (entities == null) {
       try {
-        parseHTML(str);
+        parseHtml(str);
       } catch (err) {
         assert(err instanceof Error);
         assertStrictEquals(err.message, result);
       }
     } else {
-      const parsed = parseHTML(str);
+      const parsed = parseHtml(str);
       assertStrictEquals(decode(parsed.text), result);
       assertEquals(parsed.entities, entities);
     }
