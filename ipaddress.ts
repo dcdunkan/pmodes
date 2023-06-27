@@ -1,5 +1,5 @@
-import { decode } from "./encode.ts";
-import { CODEPOINTS, isDigit, isHexDigit } from "./utilities.ts";
+import { CODEPOINTS, decode } from "./encode.ts";
+import { isDigit, isHexDigit } from "./utilities.ts";
 
 export class IPAddress {
   #isValid = false;

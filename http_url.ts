@@ -1,6 +1,6 @@
-import { encode, mergeTypedArrays, toInteger } from "./encode.ts";
 import { IPAddress } from "./ipaddress.ts";
-import { areTypedArraysEqual, CHECK, CODEPOINTS, isAlphaOrDigit, isHexDigit, isSpace, toLower } from "./utilities.ts";
+import { areTypedArraysEqual, CODEPOINTS, encode, mergeTypedArrays, toInteger } from "./encode.ts";
+import { CHECK, isAlphaOrDigit, isHexDigit, isSpace, toLower } from "./utilities.ts";
 
 export enum HttpUrlProtocol {
   Http,

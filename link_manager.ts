@@ -1,18 +1,8 @@
 import { CustomEmojiId } from "./custom_emoji_id.ts";
-import { encode, mergeTypedArrays, toInteger } from "./encode.ts";
+import { areTypedArraysEqual, CODEPOINTS, encode, mergeTypedArrays, toInteger } from "./encode.ts";
 import { HttpUrlProtocol, parseURL } from "./http_url.ts";
 import { UserId } from "./user_id.ts";
-import {
-  areTypedArraysEqual,
-  beginsWith,
-  CHECK,
-  CODEPOINTS,
-  fullSplit,
-  isAlphaOrDigit,
-  split,
-  toLower,
-  tolowerBeginsWith,
-} from "./utilities.ts";
+import { beginsWith, CHECK, fullSplit, isAlphaOrDigit, split, toLower, tolowerBeginsWith } from "./utilities.ts";
 
 export class LinkManager {
   static getLinkUserId(url: Uint8Array): UserId {

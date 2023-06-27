@@ -1,6 +1,6 @@
-import { unreachable } from "https://deno.land/std@0.191.0/testing/asserts.ts";
-import { unicodeToLower } from "./unicode.ts";
 import { mergeTypedArrays } from "./encode.ts";
+import { unicodeToLower } from "./unicode.ts";
+import { UNREACHABLE } from "./utilities.ts";
 
 export function isUTF8CharacterFirstCodeUnit(c: number): boolean {
   return (c & 0xC0) !== 0x80;
@@ -45,11 +45,9 @@ export function nextUtf8Unsafe(data: Uint8Array, pos: number): { code: number; p
     code = ((a & 0x07) << 18) | ((data[pos + 1] & 0x3f) << 12) | ((data[pos + 2] & 0x3f) << 6) | (data[pos + 3] & 0x3f);
     return { pos: pos + 4, code };
   }
-  unreachable();
+  UNREACHABLE();
 }
 
-export function appendUTF8CharacterUnsafe(text: number[], pos: number, code: number): number;
-export function appendUTF8CharacterUnsafe(text: Uint8Array, pos: number, code: number): number;
 export function appendUTF8CharacterUnsafe(text: number[] | Uint8Array, pos: number, code: number): number {
   if (code <= 0x7f) {
     text[pos++] = code;

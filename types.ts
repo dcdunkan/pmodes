@@ -1,4 +1,4 @@
-import { CustomEmojiId } from "./custom_emoji_id.ts";
+import type { CustomEmojiId } from "./custom_emoji_id.ts";
 import type { UserId } from "./user_id.ts";
 
 export declare namespace MessageEntity {
