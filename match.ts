@@ -35,11 +35,29 @@ import {
   utf8utf16Substr,
 } from "./utf8.ts";
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
-import { areTypedArraysEqual, CODEPOINTS, decode, encode, toInteger } from "./encode.ts";
+import { areTypedArraysEqual, CODEPOINTS, decode, encode, toInteger, toIntegerSafe } from "./encode.ts";
 import { BAD_PATH_END_CHARACTERS, COMMON_TLDS } from "./constants.ts";
-import { getTypePriority, MessageEntity, MessageEntityType, messageEntityTypeString } from "./message_entity.ts";
+import {
+  getTextEntitiesObject,
+  getTypePriority,
+  MessageEntity,
+  MessageEntityType,
+  messageEntityTypeString,
+  TextEntityObject,
+} from "./message_entity.ts";
 
 export type Position = [number, number];
+
+export function getFormattedTextObject(
+  text: FormattedText,
+  skipBotCommands: boolean,
+  maxMediaTimestamps: number,
+): { text: Uint8Array; entities: TextEntityObject[] } {
+  return {
+    text: text.text,
+    entities: getTextEntitiesObject(text.entities, skipBotCommands, maxMediaTimestamps),
+  };
+}
 
 export function matchMentions(str: Uint8Array): Position[] {
   const result: Position[] = [];
@@ -609,7 +627,7 @@ export function matchURLs(str: Uint8Array): Position[] {
 
     if (urlBeginPos !== begin) {
       const prefix = str.slice(begin, urlBeginPos);
-      if (prefix.length >= 6 && endsWith(prefix, encode("://"))) {
+      if (prefix.length >= 6 && endsWith(prefix, "://")) {
         let protocolBeginPos = urlBeginPos - 3;
         while (protocolBeginPos !== begin) {
           protocolBeginPos = prevUtf8Unsafe(str, protocolBeginPos);
@@ -1028,7 +1046,7 @@ export function removeEmptyEntities(entities: MessageEntity[]): MessageEntity[] 
   });
 }
 
-export function sortEntities(entities: MessageEntity[]) {
+export function sortEntities(entities: MessageEntity[]): MessageEntity[] {
   return entities.sort(({ offset, type, length }, other) => {
     if (offset !== other.offset) {
       return offset < other.offset ? -1 : 1;
@@ -1042,7 +1060,7 @@ export function sortEntities(entities: MessageEntity[]) {
   });
 }
 
-export function isSorted(entities: MessageEntity[]) {
+export function isSorted(entities: MessageEntity[]): boolean {
   const sortedEntities = sortEntities(entities);
   for (let i = 0; i < entities.length; i++) {
     const entity = entities[i], sorted = sortedEntities[i];
@@ -1071,21 +1089,21 @@ export function isSorted(entities: MessageEntity[]) {
   return true;
 }
 
-export function checkIsSorted(entities: MessageEntity[]) {
+export function checkIsSorted(entities: MessageEntity[]): void {
   LOG_CHECK(isSorted(entities), "unsorted", entities);
 }
 
-export function checkNonIntersecting(entities: MessageEntity[]) {
+export function checkNonIntersecting(entities: MessageEntity[]): void {
   for (let i = 0; i + 1 < entities.length; i++) {
     LOG_CHECK(entities[i].offset + entities[i].length <= entities[i + 1].offset, "intersects:", entities);
   }
 }
 
-export function getEntityTypeMask(type: MessageEntityType) {
+export function getEntityTypeMask(type: MessageEntityType): number {
   return 1 << type;
 }
 
-export function getSplittableEntitiesMask() {
+export function getSplittableEntitiesMask(): number {
   return getEntityTypeMask(MessageEntityType.Bold) |
     getEntityTypeMask(MessageEntityType.Italic) |
     getEntityTypeMask(MessageEntityType.Underline) |
@@ -1097,7 +1115,7 @@ export function getBlockquoteEntitesMask() {
   return getEntityTypeMask(MessageEntityType.BlockQuote);
 }
 
-export function getContinuousEntitiesMask() {
+export function getContinuousEntitiesMask(): number {
   return getEntityTypeMask(MessageEntityType.Mention) |
     getEntityTypeMask(MessageEntityType.Hashtag) |
     getEntityTypeMask(MessageEntityType.BotCommand) |
@@ -1112,13 +1130,13 @@ export function getContinuousEntitiesMask() {
     getEntityTypeMask(MessageEntityType.CustomEmoji);
 }
 
-export function getPreEntitiesMask() {
+export function getPreEntitiesMask(): number {
   return getEntityTypeMask(MessageEntityType.Pre) |
     getEntityTypeMask(MessageEntityType.Code) |
     getEntityTypeMask(MessageEntityType.PreCode);
 }
 
-export function getUserEntitiesMask() {
+export function getUserEntitiesMask(): number {
   return getSplittableEntitiesMask() |
     getBlockquoteEntitesMask() |
     getEntityTypeMask(MessageEntityType.TextUrl) |
@@ -1127,27 +1145,27 @@ export function getUserEntitiesMask() {
     getPreEntitiesMask();
 }
 
-export function isSplittableEntity(type: MessageEntityType) {
+export function isSplittableEntity(type: MessageEntityType): boolean {
   return (getEntityTypeMask(type) & getSplittableEntitiesMask()) !== 0;
 }
 
-export function isBlockquoteEntity(type: MessageEntityType) {
+export function isBlockquoteEntity(type: MessageEntityType): boolean {
   return type === MessageEntityType.BlockQuote;
 }
 
-export function isContinuousEntity(type: MessageEntityType) {
+export function isContinuousEntity(type: MessageEntityType): boolean {
   return (getEntityTypeMask(type) & getContinuousEntitiesMask()) !== 0;
 }
 
-export function isPreEntity(type: MessageEntityType) {
+export function isPreEntity(type: MessageEntityType): boolean {
   return (getEntityTypeMask(type) & getPreEntitiesMask()) !== 0;
 }
 
-export function isUserEntity(type: MessageEntityType) {
+export function isUserEntity(type: MessageEntityType): boolean {
   return (getEntityTypeMask(type) & getUserEntitiesMask()) !== 0;
 }
 
-export function isHiddenDataEntity(type: MessageEntityType) {
+export function isHiddenDataEntity(type: MessageEntityType): boolean {
   return (getEntityTypeMask(type) &
     (getEntityTypeMask(MessageEntityType.TextUrl) |
       getEntityTypeMask(MessageEntityType.MentionName) |
@@ -1156,7 +1174,7 @@ export function isHiddenDataEntity(type: MessageEntityType) {
 
 export const SPLITTABLE_ENTITY_TYPE_COUNT = 5;
 
-export function getSplittableEntityTypeIndex(type: MessageEntityType) {
+export function getSplittableEntityTypeIndex(type: MessageEntityType): number {
   if (type <= MessageEntityType.Bold + 1) { // bold or italic
     return type - MessageEntityType.Bold;
   } else if (type <= MessageEntityType.Underline + 1) { // underline or strikthrough
@@ -1361,16 +1379,13 @@ export function findEntities(
 
 export function findMediaTimestampEntities(text: Uint8Array): MessageEntity[] {
   let entities: MessageEntity[] = [];
-
   const mediaTimestamps = findMediaTimestamps(text);
   for (const [entity, timestamp] of mediaTimestamps) {
     const offset = entity[0];
     const length = entity[1] - entity[0];
     entities.push(new MessageEntity(MessageEntityType.MediaTimestamp, offset, length, timestamp));
   }
-
   entities = fixEntityOffsets(text, entities);
-
   return entities;
 }
 
@@ -1381,9 +1396,7 @@ export function mergeEntities(
   if (newEntities.length === 0) return oldEntities;
   if (oldEntities.length === 0) return newEntities;
 
-  const result = new Array<MessageEntity>(
-    /* oldEntities.length + newEntities.length */
-  );
+  const result = new Array<MessageEntity>();
 
   let newIt = 0;
   const newEnd = newEntities.length;
@@ -1412,7 +1425,7 @@ export function mergeEntities(
   return result;
 }
 
-export function isPlainDomain(url: Uint8Array) {
+export function isPlainDomain(url: Uint8Array): boolean {
   return url.indexOf(CODEPOINTS["/"]) >= url.length && url.indexOf(CODEPOINTS["?"]) >= url.length &&
     url.indexOf(CODEPOINTS["#"]) >= url.length;
 }
@@ -1855,7 +1868,53 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
   return { text: text.slice(0, resultSize), entities };
 }
 
-export function decodeHtmlEntity(text: Uint8Array, pos: number) {
+export function findTextUrlEntitiesV3(text: Uint8Array): Uint8Array[] {
+  const result: Uint8Array[] = [];
+  const size = text.length;
+  for (let i = 0; i < size; i++) {
+    if (text[i] !== CODEPOINTS["["]) {
+      continue;
+    }
+
+    const textBegin = i;
+    let textEnd = textBegin + 1;
+    while (textEnd < size && text[textEnd] !== CODEPOINTS["]"]) {
+      textEnd++;
+    }
+
+    i = textEnd;
+
+    if (textEnd === size || textEnd === textBegin + 1) {
+      continue;
+    }
+
+    const urlBegin = textEnd + 1;
+    if (urlBegin === size || text[urlBegin] !== CODEPOINTS["("]) {
+      continue;
+    }
+
+    let urlEnd = urlBegin + 1;
+    while (urlEnd < size && text[urlEnd] !== CODEPOINTS[")"]) {
+      urlEnd++;
+    }
+
+    i = urlEnd;
+
+    if (urlEnd < size) {
+      const url = text.subarray(urlBegin + 1, urlEnd);
+      if (LinkManager.getCheckedLink(url).length !== 0) {
+        result.push(text.subarray(textBegin, textEnd + 1));
+        result.push(text.subarray(urlBegin, urlEnd + 1));
+      }
+    }
+  }
+  return result;
+}
+
+export function decodeHtmlEntity(
+  text: Uint8Array,
+  pos: number,
+): { res: number; pos: number } | undefined {
   CHECK(text[pos] === CODEPOINTS["&"]);
   let endPos = pos + 1;
   let res = 0;
@@ -1913,7 +1972,7 @@ export const TAG_NAMES = [
   "code"
 ];
 
-export function parseHtml(str: Uint8Array) {
+export function parseHtml(str: Uint8Array): FormattedText {
   const strSize = str.length;
   const text = str;
   let resultEnd = 0;
@@ -2105,11 +2164,11 @@ export function parseHtml(str: Uint8Array) {
         ) {
           entities.push(new MessageEntity(MessageEntityType.Spoiler, entityOffset, entityLength));
         } else if (areTypedArraysEqual(tagName, "tg-emoji")) {
-          const documentId = toInteger(nestedEntities.at(-1)!.argument);
-          const rDocumentId = BigInt(isNaN(documentId) ? 0 : documentId);
-          if (rDocumentId === 0n) {
+          const documentId = toIntegerSafe(nestedEntities.at(-1)!.argument);
+          if (documentId instanceof Error || documentId === 0) {
             throw new Error("Invalid custom emoji identifier specified");
           }
+          const rDocumentId = BigInt(documentId);
           entities.push(
             new MessageEntity(
               MessageEntityType.CustomEmoji,

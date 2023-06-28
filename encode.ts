@@ -1,3 +1,6 @@
+import { checkUtf8 } from "./utf8.ts";
+import { isDigit } from "./utilities.ts";
+
 export const ENCODER = new TextEncoder(), DECODER = new TextDecoder();
 
 // deno-fmt-ignore
@@ -11,16 +14,12 @@ export const CODEPOINTS = {
   "|": 124, "x": 120, 
 };
 
-export function encode(data: string) {
+export function encode(data: string): Uint8Array {
   return ENCODER.encode(data);
 }
 
 export function decode(data: number | Uint8Array): string {
-  return DECODER.decode(typeof data === "number" ? new Uint8Array([data]) : data);
-}
-
-export function toInteger(str: Uint8Array, radix = 10) {
-  return Number.parseInt(decode(str), radix);
+  return DECODER.decode(typeof data === "number" ? Uint8Array.of(data) : data);
 }
 
 export function areTypedArraysEqual(a: Uint8Array, b: string | Uint8Array): boolean {
@@ -28,7 +27,7 @@ export function areTypedArraysEqual(a: Uint8Array, b: string | Uint8Array): bool
   return a.byteLength === b.byteLength && !a.some((val, i) => val !== b[i]);
 }
 
-export function mergeTypedArrays(...parts: Uint8Array[]) {
+export function mergeTypedArrays(...parts: Uint8Array[]): Uint8Array {
   const resultSize = parts.reduce((p, c) => p + c.length, 0);
   const result = new Uint8Array(resultSize);
   let offset = 0;
@@ -37,4 +36,42 @@ export function mergeTypedArrays(...parts: Uint8Array[]) {
     offset += part.length;
   }
   return result;
+}
+
+export function toInteger(str: Uint8Array) {
+  let integerValue = 0;
+  let begin = 0;
+  const end = str.length;
+  let isNegative = false;
+  if (begin !== end && str[begin] === CODEPOINTS["-"]) {
+    isNegative = true;
+    begin++;
+  }
+  while (begin !== end && isDigit(str[begin])) {
+    integerValue = (integerValue * 10) + (str[begin++] - CODEPOINTS["0"]);
+  }
+  if (integerValue > Number.MAX_SAFE_INTEGER) {
+    integerValue = ~integerValue + 1;
+    isNegative = !isNegative;
+    if (integerValue > Number.MAX_SAFE_INTEGER) {
+      return Number.MIN_SAFE_INTEGER;
+    }
+  }
+  return isNegative ? -integerValue : integerValue;
+}
+
+export function getToIntegerSafeError(str: Uint8Array): Error {
+  let status = `Can't parse "${decode(str)}" as an integer`;
+  if (!checkUtf8(encode(status))) {
+    status = "Strings must be encoded in UTF-8";
+  }
+  return new Error(status);
+}
+
+export function toIntegerSafe(str: Uint8Array) {
+  const res = toInteger(str);
+  if (!areTypedArraysEqual(str, res.toString())) {
+    return new Error(decode(str));
+  }
+  return res;
 }

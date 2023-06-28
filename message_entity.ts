@@ -55,6 +55,15 @@ export enum MessageEntityType {
   Size,
 }
 
+export type AdditionalEntityProperties =
+  | null
+  | Record<never, never>
+  | { language: Uint8Array }
+  | { url: Uint8Array }
+  | { user_id: bigint }
+  | { custom_emoji_id: bigint }
+  | { timestamp: number };
+
 export class MessageEntityError extends Error {
   override name = "MessageEntityError";
   constructor(message: string) {
@@ -126,6 +135,125 @@ export class MessageEntity {
     const otherPriority = getTypePriority(other.type);
     return priority < otherPriority;
   }
+
+  getTextEntityObject(): TextEntityObject | undefined {
+    const additional = this.getTextEntityTypeObject();
+    if (additional == null || this.type === MessageEntityType.Size) return;
+    return {
+      type: this.type,
+      offset: this.offset,
+      length: this.length,
+      ...additional,
+    } as TextEntityObject;
+  }
+
+  getTextEntityTypeObject(): AdditionalEntityProperties {
+    switch (this.type) {
+      case MessageEntityType.Mention:
+      case MessageEntityType.Hashtag:
+      case MessageEntityType.BotCommand:
+      case MessageEntityType.Url:
+      case MessageEntityType.EmailAddress:
+      case MessageEntityType.Bold:
+      case MessageEntityType.Italic:
+      case MessageEntityType.Underline:
+      case MessageEntityType.Strikethrough:
+        return {};
+      case MessageEntityType.BlockQuote:
+        return null;
+      case MessageEntityType.Code:
+      case MessageEntityType.Pre:
+        return {};
+      case MessageEntityType.PreCode:
+        return { language: this.argument };
+      case MessageEntityType.TextUrl:
+        return { url: this.argument };
+      case MessageEntityType.MentionName:
+        return { user_id: this.userId.get() };
+      case MessageEntityType.Cashtag:
+      case MessageEntityType.PhoneNumber:
+      case MessageEntityType.BankCardNumber:
+        return {};
+      case MessageEntityType.MediaTimestamp:
+        return { timestamp: this.mediaTimestamp };
+      case MessageEntityType.Spoiler:
+        return {};
+      case MessageEntityType.CustomEmoji:
+        return { custom_emoji_id: this.customEmojiId.get() };
+      default:
+        UNREACHABLE();
+    }
+  }
+}
+
+export declare namespace TextEntityObject {
+  export interface AbstractTextEntityObject {
+    type: MessageEntityType;
+    offset: number;
+    length: number;
+  }
+  export interface CommonTextEntityObject extends AbstractTextEntityObject {
+    type:
+      | MessageEntityType.Mention
+      | MessageEntityType.Hashtag
+      | MessageEntityType.BotCommand
+      | MessageEntityType.EmailAddress
+      | MessageEntityType.Bold
+      | MessageEntityType.Italic
+      | MessageEntityType.Underline
+      | MessageEntityType.Strikethrough
+      | MessageEntityType.Code
+      | MessageEntityType.Pre
+      | MessageEntityType.Cashtag
+      | MessageEntityType.PhoneNumber
+      | MessageEntityType.BankCardNumber
+      | MessageEntityType.Spoiler;
+  }
+  export interface PreCodeTextEntityObject extends AbstractTextEntityObject {
+    type: MessageEntityType.PreCode;
+    language: Uint8Array;
+  }
+  export interface TextUrlTextEntityObject extends AbstractTextEntityObject {
+    type: MessageEntityType.TextUrl;
+    url: Uint8Array;
+  }
+  export interface MentionNameTextEntityObject extends AbstractTextEntityObject {
+    type: MessageEntityType.MentionName;
+    user_id: bigint;
+  }
+  export interface MediaTimestampTextEntityObject extends AbstractTextEntityObject {
+    type: MessageEntityType.MediaTimestamp;
+    timestamp: number;
+  }
+  export interface CustomEmojiTextEntityObject extends AbstractTextEntityObject {
+    type: MessageEntityType.CustomEmoji;
+    custom_emoji_id: bigint;
+  }
+}
+
+export type TextEntityObject =
+  | TextEntityObject.CommonTextEntityObject
+  | TextEntityObject.PreCodeTextEntityObject
+  | TextEntityObject.TextUrlTextEntityObject
+  | TextEntityObject.MentionNameTextEntityObject
+  | TextEntityObject.MediaTimestampTextEntityObject
+  | TextEntityObject.CustomEmojiTextEntityObject;
+
+export function getTextEntitiesObject(
+  entities: MessageEntity[],
+  skipBotCommands: boolean,
+  maxMediaTimestamp: number,
+): TextEntityObject[] {
+  const result: TextEntityObject[] = [];
+  for (const entity of entities) {
+    if (skipBotCommands && entity.type === MessageEntityType.BotCommand) continue;
+    if (entity.type === MessageEntityType.MediaTimestamp && maxMediaTimestamp < entity.mediaTimestamp) continue;
+    const entityObject = entity.getTextEntityObject();
+    if (entityObject?.type != null) {
+      result.push(entityObject);
+    }
+  }
+  return result;
 }
 
 export function messageEntityTypeString(messageEntityType: MessageEntityType) {

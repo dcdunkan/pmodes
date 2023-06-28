@@ -5,6 +5,10 @@ export class CustomEmojiId {
     return this.id !== 0n;
   }
 
+  get() {
+    return this.id;
+  }
+
   toString() {
     return this.id.toString();
   }
