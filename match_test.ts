@@ -1,6 +1,6 @@
 import { CustomEmojiId } from "./custom_emoji_id.ts";
 import { assert, assertEquals, assertStrictEquals } from "./deps_test.ts";
-import { decode, encode } from "./encode.ts";
+import { CODEPOINTS, decode, encode } from "./encode.ts";
 import {
   findBankCardNumbers,
   findBotCommands,
@@ -10,6 +10,7 @@ import {
   findMentions,
   findTgUrls,
   findUrls,
+  fixFormattedText,
   isEmailAddress,
   parseHtml,
   parseMarkdownV2,
@@ -681,6 +682,60 @@ Deno.test("url", () => {
   check("test_.com", []);
   check("_test.com", []);
   check("_.test.com", ["_.test.com"]);
+});
+
+Deno.test("fix formatted text", () => {
+  const check = (
+    str: string,
+    entities: MessageEntity[],
+    expectedStr: string,
+    expectedEntities: MessageEntity[],
+    allowEmpty = true,
+    skipNewEntities = false,
+    skipBotCommands = false,
+    skipTrim = true,
+  ) => {
+    const { entities: $entities, ok, result } = fixFormattedText(
+      encode(str),
+      entities,
+      allowEmpty,
+      skipNewEntities,
+      skipBotCommands,
+      true,
+      skipTrim,
+    );
+    assert(ok);
+    assertStrictEquals(encode(expectedStr), result);
+    assertEquals(expectedEntities, $entities);
+  };
+  const checkError = (
+    str: string,
+    entities: MessageEntity[],
+    allowEmpty: boolean,
+    skipNewEntities: boolean,
+    skipBotCommands: boolean,
+    skipTrim: boolean,
+  ) => {
+    assert(
+      fixFormattedText(encode(str), entities, allowEmpty, skipNewEntities, skipBotCommands, true, skipTrim) instanceof
+        Error,
+    );
+  };
+
+  const str: number[] = [];
+  const fixedStr: number[] = [];
+  for (let i = 0; i <= 32; i++) {
+    str.push(i);
+    if (i !== 13) {
+      if (i !== 10) {
+        fixedStr.push(CODEPOINTS[" "]);
+      } else {
+        fixedStr.push(str.at(-1)!);
+      }
+    }
+  }
+
+  check(decode(Uint8Array.from(str)), [], "", [], true, true, true, true);
 });
 
 Deno.test("parse markdown v2", () => {

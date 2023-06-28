@@ -4,6 +4,7 @@ import { UserId } from "./user_id.ts";
 import {
   beginsWith,
   CHECK,
+  cleanInputString,
   endsWith,
   fullSplit,
   hexToInt,
@@ -13,12 +14,16 @@ import {
   isAlphaDigitUnderscoreOrMinus,
   isAlphaOrDigit,
   isDigit,
+  isEmptyString,
   isHashtagLetter,
   isHexDigit,
   isSpace,
   isWordCharacter,
   LOG_CHECK,
+  replaceOffendingCharacters,
   split,
+  toInteger,
+  toIntegerSafe,
   toLower,
   UNREACHABLE,
 } from "./utilities.ts";
@@ -35,17 +40,7 @@ import {
   utf8utf16Substr,
 } from "./utf8.ts";
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
-import {
-  areTypedArraysEqual,
-  cleanInputString,
-  cleanInputStringWithEntities,
-  CODEPOINTS,
-  decode,
-  encode,
-  isEmptyString,
-  toInteger,
-  toIntegerSafe,
-} from "./encode.ts";
+import { areTypedArraysEqual, CODEPOINTS, decode, encode } from "./encode.ts";
 import { BAD_PATH_END_CHARACTERS, COMMON_TLDS, NUMERIC_LIMITS } from "./constants.ts";
 import {
   getTextEntitiesObject,
@@ -2253,6 +2248,154 @@ export function parseHtml(str: Uint8Array): FormattedText {
   return { text: str, entities };
 }
 
+export function cleanInputStringWithEntities(
+  text: Uint8Array,
+  entities: MessageEntity[],
+): Uint8Array {
+  checkIsSorted(entities);
+
+  interface EntityInfo {
+    entity: MessageEntity;
+    utf16SkippedBefore: number;
+  }
+
+  const nestedEntitiesStack: EntityInfo[] = [];
+  let currentEntity = 0;
+
+  let utf16Offset = 0;
+  let utf16Skipped = 0;
+
+  const textSize = text.length;
+
+  const result: number[] = [];
+
+  for (let pos = 0; pos <= textSize; pos++) {
+    const c = text[pos];
+    const isUtf8CharacterBegin = isUtf8CharacterFirstCodeUnit(c);
+    if (isUtf8CharacterBegin) {
+      while (nestedEntitiesStack.length !== 0) {
+        const entity = nestedEntitiesStack.at(-1)!.entity;
+        const entityEnd = entity.offset + entity.length;
+        if (utf16Offset < entityEnd) {
+          break;
+        }
+
+        if (utf16Offset !== entityEnd) {
+          CHECK(utf16Offset === entityEnd + 1);
+          throw new Error(
+            "Entity beginning at UTF-16 offset " + entity.offset +
+              " ends in a middle of a UTF-16 symbol at byte offset " + pos,
+          );
+        }
+
+        const skippedBeforeCurrentEntity = nestedEntitiesStack.at(-1)!.utf16SkippedBefore;
+        entity.offset -= skippedBeforeCurrentEntity;
+        entity.length -= utf16Skipped - skippedBeforeCurrentEntity;
+        nestedEntitiesStack.pop();
+      }
+      while (currentEntity < entities.length && utf16Offset >= entities[currentEntity].offset) {
+        if (utf16Offset !== entities[currentEntity].offset) {
+          CHECK(utf16Offset === entities[currentEntity].offset + 1);
+          throw new Error("Entity begins in a middle of a UTF-16 symbol at byte offset " + pos);
+        }
+        nestedEntitiesStack.push({
+          entity: entities[currentEntity++],
+          utf16SkippedBefore: utf16Skipped,
+        });
+      }
+    }
+    if (pos === textSize) {
+      break;
+    }
+
+    switch (c) {
+      // remove control characters
+      case 0:
+      case 1:
+      case 2:
+      case 3:
+      case 4:
+      case 5:
+      case 6:
+      case 7:
+      case 8:
+      case 9:
+      // allow '\n'
+      /* falls through */
+      case 11:
+      case 12:
+      // ignore '\r'
+      /* falls through */
+      case 14:
+      case 15:
+      case 16:
+      case 17:
+      case 18:
+      case 19:
+      case 20:
+      case 21:
+      case 22:
+      case 23:
+      case 24:
+      case 25:
+      case 26:
+      case 27:
+      case 28:
+      case 29:
+      case 30:
+      case 31:
+      case 32:
+        result.push(CODEPOINTS[" "]);
+        utf16Offset++;
+        break;
+      case CODEPOINTS["\r"]:
+        // skip
+        utf16Offset++;
+        utf16Skipped++;
+        break;
+      default: {
+        if (isUtf8CharacterBegin) {
+          utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
+        }
+        if (c === 0xe2 && pos + 2 < textSize) {
+          let next = text[pos + 1];
+          if (next === 0x80) {
+            next = text[pos + 2];
+            if (0xa8 <= next && next <= 0xae) {
+              pos += 2;
+              utf16Skipped++;
+              break;
+            }
+          }
+        }
+        if (c === 0xcc && pos + 1 < textSize) {
+          const next = text[pos + 1];
+          if (next === 0xb3 || next === 0xbf || next === 0x8a) {
+            pos++;
+            utf16Skipped++;
+            break;
+          }
+        }
+        result.push(text[pos]);
+        break;
+      }
+    }
+  }
+
+  if (currentEntity !== entities.length) {
+    throw new Error("Entity begins after the end of the text at UTF-16 offset " + entities[currentEntity].offset);
+  }
+  if (nestedEntitiesStack.length !== 0) {
+    const entity = nestedEntitiesStack.at(-1)!.entity;
+    throw new Error(
+      "Entity beginning at UTF-16 offset " + entity.offset + " ends after the end of the text at UTF-16 offset " +
+        entity.offset + entity.length,
+    );
+  }
+
+  return replaceOffendingCharacters(Uint8Array.from(result));
+}
+
 export function removeInvalidEntities(
   text: Uint8Array,
   entities: MessageEntity[],
@@ -2518,7 +2661,7 @@ export function fixFormattedText(
   skipBotCommands: boolean,
   skipMediaTimestamps: boolean,
   skipTrim: boolean,
-): { ok: boolean; entities: MessageEntity[] } {
+): { ok: boolean; entities: MessageEntity[]; result: Uint8Array } {
   let result: Uint8Array;
   if (entities.length === 0) {
     // fast path
@@ -2558,7 +2701,7 @@ export function fixFormattedText(
     if (allowEmpty) {
       text = new Uint8Array();
       entities = [];
-      return { ok: true, entities };
+      return { ok: true, entities, result };
     }
     throw new Error("Message must be non-empty");
   }
@@ -2634,5 +2777,5 @@ export function fixFormattedText(
   const { entities: entities2 } = removeInvalidEntities(text, entities);
   entities = entities2;
 
-  return { ok: true, entities };
+  return { ok: true, entities, result };
 }
