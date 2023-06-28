@@ -209,8 +209,6 @@ export function cleanInputString(str: Uint8Array): false | Uint8Array {
     return false;
   }
 
-  str = Uint8Array.of(113, 113, 114, 120);
-
   const strSize = str.length;
   let newSize = 0;
   for (let pos = 0; pos < strSize; pos++) {

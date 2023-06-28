@@ -695,7 +695,7 @@ Deno.test("fix formatted text", () => {
     skipBotCommands = false,
     skipTrim = true,
   ) => {
-    const { entities: $entities, ok, result } = fixFormattedText(
+    const { entities: $entities, ok, text } = fixFormattedText(
       encode(str),
       entities,
       allowEmpty,
@@ -705,8 +705,8 @@ Deno.test("fix formatted text", () => {
       skipTrim,
     );
     assert(ok);
-    assertStrictEquals(encode(expectedStr), result);
-    assertEquals(expectedEntities, $entities);
+    assertEquals(text, encode(expectedStr));
+    assertEquals($entities, expectedEntities);
   };
   const checkError = (
     str: string,

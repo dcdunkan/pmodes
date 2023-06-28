@@ -2661,7 +2661,7 @@ export function fixFormattedText(
   skipBotCommands: boolean,
   skipMediaTimestamps: boolean,
   skipTrim: boolean,
-): { ok: boolean; entities: MessageEntity[]; result: Uint8Array } {
+): { ok: boolean; entities: MessageEntity[]; text: Uint8Array } {
   let result: Uint8Array;
   if (entities.length === 0) {
     // fast path
@@ -2701,7 +2701,7 @@ export function fixFormattedText(
     if (allowEmpty) {
       text = new Uint8Array();
       entities = [];
-      return { ok: true, entities, result };
+      return { ok: true, entities, text };
     }
     throw new Error("Message must be non-empty");
   }
@@ -2777,5 +2777,5 @@ export function fixFormattedText(
   const { entities: entities2 } = removeInvalidEntities(text, entities);
   entities = entities2;
 
-  return { ok: true, entities, result };
+  return { ok: true, entities, text };
 }
