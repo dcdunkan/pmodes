@@ -2,6 +2,11 @@ import { encode } from "./encode.ts";
 
 export const BAD_PATH_END_CHARACTERS = encode(".:;,('?!`");
 
+export const NUMERIC_LIMITS = {
+  int32: Math.pow(2, 31) - 1,
+  unsigned_char: Math.pow(2, 8) - 1,
+};
+
 // deno-fmt-ignore
 export const COMMON_TLDS = [
     "aaa", "aarp", "abarth", "abb", "abbott", "abbvie", "abc", "able", "abogado", "abudhabi", "ac", "academy",

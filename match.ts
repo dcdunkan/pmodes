@@ -35,8 +35,18 @@ import {
   utf8utf16Substr,
 } from "./utf8.ts";
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
-import { areTypedArraysEqual, CODEPOINTS, decode, encode, toInteger, toIntegerSafe } from "./encode.ts";
-import { BAD_PATH_END_CHARACTERS, COMMON_TLDS } from "./constants.ts";
+import {
+  areTypedArraysEqual,
+  cleanInputString,
+  cleanInputStringWithEntities,
+  CODEPOINTS,
+  decode,
+  encode,
+  isEmptyString,
+  toInteger,
+  toIntegerSafe,
+} from "./encode.ts";
+import { BAD_PATH_END_CHARACTERS, COMMON_TLDS, NUMERIC_LIMITS } from "./constants.ts";
 import {
   getTextEntitiesObject,
   getTypePriority,
@@ -1252,10 +1262,10 @@ export function removeIntersectingEntities(entities: MessageEntity[]): MessageEn
 export function removeEntitiesIntersectingBlockquote(
   entities: MessageEntity[],
   blockquoteEntities: MessageEntity[],
-): MessageEntity[] | undefined {
+): MessageEntity[] {
   checkNonIntersecting(entities);
   checkNonIntersecting(blockquoteEntities);
-  if (blockquoteEntities.length === 0) return;
+  if (blockquoteEntities.length === 0) return entities;
 
   let blockquoteIt = 0;
   let leftEntities = 0;
@@ -2241,4 +2251,388 @@ export function parseHtml(str: Uint8Array): FormattedText {
     );
   }
   return { text: str, entities };
+}
+
+export function removeInvalidEntities(
+  text: Uint8Array,
+  entities: MessageEntity[],
+): { entities: MessageEntity[]; result: [number, number] } {
+  if (entities.length === 0) {
+    // fast path
+    for (let pos = 0; pos < text.length; pos++) {
+      const backPos = text.length - pos - 1;
+      const c = text[backPos];
+      if (c !== CODEPOINTS["\n"] && c !== CODEPOINTS[" "]) {
+        return { entities, result: [backPos, 0] };
+      }
+    }
+    return { entities, result: [text.length, -1] };
+  }
+
+  const nestedEntitiesStack: MessageEntity[] = [];
+  let currentEntity = 0;
+
+  let lastNonWhitespacePos = text.length;
+
+  let utf16Offset = 0;
+  let lastNonWhitespaceUtf16Offset = -1;
+
+  entities = removeEmptyEntities(entities);
+
+  for (let pos = 0; pos <= text.length; pos++) {
+    while (nestedEntitiesStack.length !== 0) {
+      const entity = nestedEntitiesStack.at(-1)!;
+      const entityEnd = entity.offset + entity.length;
+      if (utf16Offset < entityEnd) {
+        break;
+      }
+
+      if (lastNonWhitespaceUtf16Offset >= entity.offset || isHiddenDataEntity(entity.type)) {
+        // keep entity
+        // TODO check entity for validness, for example, that mentions, hashtags, cashtags and URLs are valid
+      } else {
+        entity.length = 0;
+      }
+
+      nestedEntitiesStack.pop();
+    }
+    while (currentEntity < entities.length && utf16Offset >= entities[currentEntity].offset) {
+      nestedEntitiesStack.push(entities[currentEntity++]);
+    }
+
+    if (pos === text.length) {
+      break;
+    }
+
+    if (
+      nestedEntitiesStack.length !== 0 && nestedEntitiesStack.at(-1)!.offset === utf16Offset &&
+      (text[pos] === CODEPOINTS["\n"] || text[pos] === CODEPOINTS[" "])
+    ) {
+      for (let i = nestedEntitiesStack.length; i > 0; i--) {
+        const entity = nestedEntitiesStack[i - 1];
+        if (entity.offset !== utf16Offset || isHiddenDataEntity(entity.type)) {
+          break;
+        }
+        entity.offset++;
+        entity.length++;
+        if (entity.length === 0) {
+          CHECK(i === nestedEntitiesStack.length);
+          nestedEntitiesStack.pop();
+        }
+      }
+    }
+
+    const c = text[pos];
+    switch (c) {
+      case CODEPOINTS["\n"]:
+      case 32:
+        break;
+      default:
+        while (!isUtf8CharacterFirstCodeUnit(text[pos + 1])) {
+          pos++;
+        }
+        utf16Offset += c >= 0xf0 ? 1 : 0;
+        lastNonWhitespacePos = pos;
+        lastNonWhitespaceUtf16Offset = utf16Offset;
+        break;
+    }
+
+    utf16Offset++;
+  }
+  CHECK(nestedEntitiesStack.length === 0);
+  CHECK(currentEntity === entities.length);
+
+  entities = removeEmptyEntities(entities);
+
+  return { entities, result: [lastNonWhitespacePos, lastNonWhitespaceUtf16Offset] };
+}
+
+export function splitEntities(
+  entities: MessageEntity[],
+  otherEntities: MessageEntity[],
+): MessageEntity[] {
+  checkIsSorted(entities);
+  checkIsSorted(otherEntities);
+
+  const beginPos = new Array<number>(SPLITTABLE_ENTITY_TYPE_COUNT);
+  const endPos = new Array<number>(SPLITTABLE_ENTITY_TYPE_COUNT);
+  let it = 0;
+  let result: MessageEntity[] = [];
+  function addEntities(endOffset: number) {
+    function flushEntities(offset: number) {
+      for (
+        const type of [
+          MessageEntityType.Bold,
+          MessageEntityType.Italic,
+          MessageEntityType.Underline,
+          MessageEntityType.Strikethrough,
+          MessageEntityType.Spoiler,
+        ]
+      ) {
+        const index = getSplittableEntityTypeIndex(type);
+        if (endPos[index] !== 0 && beginPos[index] < offset) {
+          if (endPos[index] <= offset) {
+            result.push(new MessageEntity(type, beginPos[index], endPos[index] - beginPos[index]));
+            beginPos[index] = 0;
+            endPos[index] = 0;
+          } else {
+            result.push(new MessageEntity(type, beginPos[index], offset - beginPos[index]));
+            beginPos[index] = offset;
+          }
+        }
+      }
+    }
+
+    while (it !== entities.length) {
+      if (entities[it].offset >= endOffset) {
+        break;
+      }
+      CHECK(isSplittableEntity(entities[it].type));
+      const index = getSplittableEntityTypeIndex(entities[it].type);
+      if (entities[it].offset <= endPos[index] && endPos[index] !== 0) {
+        if (entities[it].offset + entities[it].length > endPos[index]) {
+          endPos[index] = entities[it].offset + entities[it].length;
+        }
+      } else {
+        flushEntities(entities[it].offset);
+        beginPos[index] = entities[it].offset;
+        endPos[index] = entities[it].offset + entities[it].length;
+      }
+      ++it;
+    }
+    flushEntities(endOffset);
+  }
+
+  const nestedEntitiesStack: MessageEntity[] = [];
+  function addOffset(offset: number) {
+    while (
+      nestedEntitiesStack.length !== 0 &&
+      offset >= nestedEntitiesStack.at(-1)!.offset + nestedEntitiesStack.at(-1)!.length
+    ) {
+      const oldSize = result.length;
+      addEntities(nestedEntitiesStack.at(-1)!.offset + nestedEntitiesStack.at(-1)!.length);
+      if (isPreEntity(nestedEntitiesStack.at(-1)!.type)) {
+        result = result.slice(0, oldSize);
+      }
+      nestedEntitiesStack.pop();
+    }
+    addEntities(offset);
+  }
+  for (const otherEntity of otherEntities) {
+    addOffset(otherEntity.offset);
+    nestedEntitiesStack.push(otherEntity);
+  }
+  addOffset(NUMERIC_LIMITS.int32);
+  entities = result;
+  return sortEntities(entities);
+}
+
+export function resplitEntities(
+  splittableEntities: MessageEntity[],
+  entities: MessageEntity[],
+): MessageEntity[] {
+  if (splittableEntities.length !== 0) {
+    splittableEntities = splitEntities(splittableEntities, entities);
+
+    if (entities.length === 0) {
+      return splittableEntities;
+    }
+
+    entities = entities.concat(entities, splittableEntities);
+    sortEntities(entities);
+  }
+  return entities;
+}
+
+export function mergeNewEntities(entities: MessageEntity[], newEntities: MessageEntity[]) {
+  checkIsSorted(entities);
+  if (newEntities.length === 0) {
+    return entities;
+  }
+
+  checkNonIntersecting(newEntities);
+
+  let continuousEntities: MessageEntity[] = [];
+  const blockquoteEntities: MessageEntity[] = [];
+  const splittableEntities: MessageEntity[] = [];
+  for (const entity of entities) {
+    if (isSplittableEntity(entity.type)) {
+      splittableEntities.push(entity);
+    } else if (isBlockquoteEntity(entity.type)) {
+      blockquoteEntities.push(entity);
+    } else {
+      continuousEntities.push(entity);
+    }
+  }
+
+  newEntities = removeEntitiesIntersectingBlockquote(newEntities, blockquoteEntities);
+  continuousEntities = mergeEntities(continuousEntities, newEntities);
+  if (blockquoteEntities.length !== 0) {
+    continuousEntities = continuousEntities.concat(blockquoteEntities);
+    continuousEntities = sortEntities(continuousEntities);
+  }
+
+  entities = resplitEntities(splittableEntities, continuousEntities);
+  checkIsSorted(entities);
+  return entities;
+}
+
+export function fixEntities(entities: MessageEntity[]): MessageEntity[] {
+  entities = sortEntities(entities);
+
+  if (areEntitiesValid(entities)) {
+    return entities;
+  }
+
+  let continuousEntities: MessageEntity[] = [];
+  let blockquoteEntities: MessageEntity[] = [];
+  const splittableEntities: MessageEntity[] = [];
+  for (const entity of entities) {
+    if (isSplittableEntity(entity.type)) {
+      splittableEntities.push(entity);
+    } else if (isBlockquoteEntity(entity.type)) {
+      blockquoteEntities.push(entity);
+    } else {
+      continuousEntities.push(entity);
+    }
+  }
+  continuousEntities = removeIntersectingEntities(continuousEntities);
+
+  if (blockquoteEntities.length !== 0) {
+    blockquoteEntities = removeIntersectingEntities(blockquoteEntities);
+    continuousEntities = removeEntitiesIntersectingBlockquote(continuousEntities, blockquoteEntities);
+    continuousEntities = continuousEntities.concat(blockquoteEntities);
+    continuousEntities = sortEntities(continuousEntities);
+  }
+
+  entities = resplitEntities(splittableEntities, continuousEntities);
+  checkIsSorted(entities);
+  return entities;
+}
+
+export function fixFormattedText(
+  text: Uint8Array,
+  entities: MessageEntity[],
+  allowEmpty: boolean,
+  skipNewEntities: boolean,
+  skipBotCommands: boolean,
+  skipMediaTimestamps: boolean,
+  skipTrim: boolean,
+): { ok: boolean; entities: MessageEntity[] } {
+  let result: Uint8Array;
+  if (entities.length === 0) {
+    // fast path
+    if (!cleanInputString(text)) {
+      throw new Error("Strings must be encoded in UTF-8");
+    }
+    result = text;
+  } else {
+    if (!checkUtf8(text)) {
+      throw new Error("Strings must be encoded in UTF-8");
+    }
+
+    for (const entity of entities) {
+      if (entity.offset < 0 || entity.offset > 1_000_000) {
+        throw new Error("Receive an entity with incorrect offset " + entity.offset);
+      }
+      if (entity.length < 0 || entity.length > 1_000_000) {
+        throw new Error("Receive an entity with incorrect length " + entity.length);
+      }
+    }
+
+    entities = removeEmptyEntities(entities);
+    entities = fixEntities(entities);
+    result = cleanInputStringWithEntities(text, entities);
+  }
+
+  const {
+    entities: entities1,
+    result: [
+      lastNonWhitespacePos,
+      lastNonWhitespaceUtf16Offset,
+    ],
+  } = removeInvalidEntities(result, entities);
+  entities = entities1;
+
+  if (lastNonWhitespaceUtf16Offset === -1) {
+    if (allowEmpty) {
+      text = new Uint8Array();
+      entities = [];
+      return { ok: true, entities };
+    }
+    throw new Error("Message must be non-empty");
+  }
+
+  entities = fixEntities(entities);
+
+  if (skipTrim) {
+    text = result;
+  } else {
+    CHECK(lastNonWhitespacePos < result.length);
+    result = result.slice(0, lastNonWhitespacePos + 1);
+    while (entities.length !== 0 && entities.at(-1)!.offset > lastNonWhitespaceUtf16Offset) {
+      CHECK(isHiddenDataEntity(entities.at(-1)!.type));
+      entities.pop();
+    }
+    let needSort = false;
+    for (const entity of entities) {
+      if (entity.offset + entity.length > lastNonWhitespaceUtf16Offset + 1) {
+        entity.length = lastNonWhitespaceUtf16Offset + 1 - entity.offset;
+        needSort = true;
+        CHECK(entity.length > 0);
+      }
+    }
+    if (needSort) {
+      entities = sortEntities(entities);
+    }
+
+    let firstNonWhitespacePos = 0;
+    const firstEntityBeginPos = entities.length === 0 ? result.length : entities[0].offset;
+    while (
+      firstNonWhitespacePos < firstEntityBeginPos &&
+      (result[firstNonWhitespacePos] === CODEPOINTS[" "] || result[firstNonWhitespacePos] === CODEPOINTS["\n"])
+    ) {
+      firstNonWhitespacePos++;
+    }
+    if (firstNonWhitespacePos > 0) {
+      const offset = firstNonWhitespacePos;
+      text = result.slice(firstNonWhitespacePos);
+      for (const entity of entities) {
+        entity.offset -= offset;
+        CHECK(entity.offset >= 0);
+      }
+    } else {
+      text = result;
+    }
+  }
+  LOG_CHECK(checkUtf8(text), text);
+
+  if (!allowEmpty && isEmptyString(text)) {
+    throw new Error("Message must be non-empty");
+  }
+
+  const LENGTH_LIMIT = 35000;
+  if (text.length > LENGTH_LIMIT) {
+    let newSize = LENGTH_LIMIT;
+    while (!isUtf8CharacterFirstCodeUnit(text[newSize])) {
+      newSize--;
+    }
+    text = text.slice(0, newSize);
+
+    const textUtf16Length = textLength(text);
+    entities = entities.filter((entity) => {
+      return !(entity.offset + entity.length > textUtf16Length);
+    });
+  }
+
+  if (!skipNewEntities) {
+    entities = mergeNewEntities(entities, findEntities(text, skipBotCommands, skipMediaTimestamps));
+  } else if (!skipMediaTimestamps) {
+    entities = mergeNewEntities(entities, findMediaTimestampEntities(text));
+  }
+
+  const { entities: entities2 } = removeInvalidEntities(text, entities);
+  entities = entities2;
+
+  return { ok: true, entities };
 }

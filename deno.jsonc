@@ -1,7 +1,11 @@
 {
   "lock": false,
   "fmt": {
-    "lineWidth": 120
+    "lineWidth": 120,
+    "exclude": ["td/"]
+  },
+  "lint": {
+    "exclude": ["td/"]
   },
   "tasks": {
     "check": "deno cache --check=all *.ts",
