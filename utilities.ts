@@ -203,7 +203,7 @@ export function replaceOffendingCharacters(str: Uint8Array): Uint8Array {
   return s;
 }
 
-export function cleanInputString(str: Uint8Array): false | Uint8Array {
+export function cleanInputString(str: Uint8Array): boolean {
   const LENGTH_LIMIT = 35000;
   if (!checkUtf8(str)) {
     return false;
@@ -285,7 +285,7 @@ export function cleanInputString(str: Uint8Array): false | Uint8Array {
   str = str.subarray(0, newSize);
   str = replaceOffendingCharacters(str);
 
-  return str;
+  return true;
 }
 
 export function trim(str: Uint8Array) {

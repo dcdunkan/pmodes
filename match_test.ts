@@ -1,6 +1,6 @@
 import { CustomEmojiId } from "./custom_emoji_id.ts";
 import { assert, assertEquals, assertStrictEquals } from "./deps_test.ts";
-import { CODEPOINTS, decode, encode } from "./encode.ts";
+import { CODEPOINTS, decode, encode, mergeTypedArrays } from "./encode.ts";
 import {
   findBankCardNumbers,
   findBotCommands,
@@ -716,26 +716,76 @@ Deno.test("fix formatted text", () => {
     skipBotCommands: boolean,
     skipTrim: boolean,
   ) => {
-    assert(
-      fixFormattedText(encode(str), entities, allowEmpty, skipNewEntities, skipBotCommands, true, skipTrim) instanceof
-        Error,
-    );
+    try {
+      fixFormattedText(encode(str), entities, allowEmpty, skipNewEntities, skipBotCommands, true, skipTrim);
+      assert(false);
+    } catch (error) {
+      assert(error instanceof Error);
+    }
   };
 
-  const str: number[] = [];
-  const fixedStr: number[] = [];
+  const str_: number[] = [];
+  const fixedStr_: number[] = [];
   for (let i = 0; i <= 32; i++) {
-    str.push(i);
+    str_.push(i);
     if (i !== 13) {
       if (i !== 10) {
-        fixedStr.push(CODEPOINTS[" "]);
+        fixedStr_.push(CODEPOINTS[" "]);
       } else {
-        fixedStr.push(str.at(-1)!);
+        fixedStr_.push(str_.at(-1)!);
       }
     }
   }
 
-  check(decode(Uint8Array.from(str)), [], "", [], true, true, true, true);
+  let str = decode(Uint8Array.from(str_));
+
+  check(str, [], "", [], true, true, true, true);
+  check(str, [], "", [], true, true, false, true);
+  check(str, [], "", [], true, false, true, true);
+  check(str, [], "", [], true, false, false, true);
+  check(str, [], "", [], true, false, false, false);
+  checkError(str, [], false, false, false, false);
+  checkError(str, [], false, false, false, true);
+
+  check("  aba\n ", [], "  aba\n ", [], true, true, true, true);
+  check("  aba\n ", [], "aba", [], true, true, true, false);
+  check("  \n ", [], "", [], true, true, true, true);
+  check("  \n ", [], "", [], true, true, true, false);
+  checkError("  \n ", [], false, true, true, false);
+
+  str = decode(mergeTypedArrays(Uint8Array.from(str_), encode("a  \r\n  ")));
+  const fixedStr = decode(mergeTypedArrays(Uint8Array.from(fixedStr_), encode("a  \n  ")));
+
+  for (let i = 33; i <= 35; i++) {
+    const entities: MessageEntity[] = [];
+    entities.push(new MessageEntity(MessageEntityType.Pre, 0, i));
+
+    const fixedEntities = entities;
+    fixedEntities.at(-1)!.length = i - 1;
+    check(str, entities, fixedStr, fixedEntities, true, false, false, true);
+
+    const expectedStr = encode(fixedStr).slice(0, 33);
+    fixedEntities.at(-1)!.length = i === 33 ? 32 : 33;
+    check(str, entities, decode(expectedStr), fixedEntities, false, false, false, false);
+  }
+
+  for (let i = 33; i <= 35; i++) {
+    const entities: MessageEntity[] = [];
+    entities.push(new MessageEntity(MessageEntityType.Bold, 0, i));
+
+    const fixedEntities = entities;
+    if (i !== 33) {
+      fixedEntities.push(new MessageEntity(MessageEntityType.Bold, 32, i - 33));
+    }
+    check(str, entities, fixedStr, fixedEntities, true, false, false, true);
+
+    const expectedStr = "a";
+    if (i !== 33) {
+      fixedEntities.at(-1)!.offset = 0;
+      fixedEntities.at(-1)!.length = 1;
+    }
+    check(str, entities, expectedStr, fixedEntities, false, false, false, false);
+  }
 });
 
 Deno.test("parse markdown v2", () => {
