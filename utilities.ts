@@ -4,11 +4,11 @@ import { checkUtf8, isUtf8CharacterFirstCodeUnit, utf8Truncate } from "./utf8.ts
 import { NUMERIC_LIMITS } from "./constants.ts";
 
 export function CHECK(condition: boolean) {
-  if (!condition) console.trace("check failed");
+  if (!condition) console.trace("CHECK failed");
 }
 
 export function LOG_CHECK(condition: boolean, ...messages: unknown[]) {
-  if (!condition) console.trace("Check failed: ", ...messages);
+  if (!condition) console.trace("LOG_CHECK failed: ", ...messages);
 }
 
 export function UNREACHABLE(): never {

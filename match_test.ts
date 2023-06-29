@@ -788,153 +788,6 @@ Deno.test("fix formatted text", () => {
   }
 });
 
-Deno.test("parse markdown v2", () => {
-  const check = (text: string, result: string, entities?: MessageEntity[]) => {
-    const str = encode(text);
-    if (entities == null) {
-      try {
-        parseMarkdownV2(str);
-      } catch (err) {
-        assert(err instanceof Error);
-        assertStrictEquals(err.message, result);
-      }
-    } else {
-      const parsed = parseMarkdownV2(str);
-      assertStrictEquals(decode(parsed.text), result);
-      assertEquals(parsed.entities, entities);
-    }
-  };
-
-  const reservedCharacters = encode("]()>#+-=|{}.!");
-  const beginCharacters = encode("_*[~`");
-
-  for (let codepoint = 1; codepoint < 126; codepoint++) {
-    if (beginCharacters.includes(codepoint)) {
-      continue;
-    }
-    const text = decode(Uint8Array.of(codepoint));
-    if (!reservedCharacters.includes(codepoint)) {
-      check(text, text, []);
-    } else {
-      check(text, `Character '${text}' is reserved and must be escaped with the preceding '\\'`);
-      const escapedText = "\\" + text;
-      check(escapedText, text, []);
-    }
-  }
-
-  check("🏟 🏟_abacaba", "Can't find end of Italic entity at byte offset 9");
-  check("🏟 🏟_abac * asd ", "Can't find end of Bold entity at byte offset 15");
-  check("🏟 🏟_abac * asd _", "Can't find end of Italic entity at byte offset 21");
-  check("🏟 🏟`", "Can't find end of Code entity at byte offset 9");
-  check("🏟 🏟```", "Can't find end of Pre entity at byte offset 9");
-  check("🏟 🏟```a", "Can't find end of Pre entity at byte offset 9");
-  check("🏟 🏟```a ", "Can't find end of PreCode entity at byte offset 9");
-  check("🏟 🏟__🏟 🏟_", "Can't find end of Italic entity at byte offset 20");
-  check("🏟 🏟_🏟 🏟__", "Can't find end of Underline entity at byte offset 19");
-  check("🏟 🏟```🏟 🏟`", "Can't find end of Code entity at byte offset 21");
-  check("🏟 🏟```🏟 🏟_", "Can't find end of PreCode entity at byte offset 9");
-  check("🏟 🏟```🏟 🏟\\`", "Can't find end of PreCode entity at byte offset 9");
-  check("[telegram\\.org](asd\\)", "Can't find end of a URL at byte offset 16");
-  check("[telegram\\.org](", "Can't find end of a URL at byte offset 16");
-  check("[telegram\\.org](asd", "Can't find end of a URL at byte offset 16");
-  check("🏟 🏟__🏟 _🏟___", "Can't find end of Italic entity at byte offset 23");
-  check("🏟 🏟__", "Can't find end of Underline entity at byte offset 9");
-  check("🏟 🏟||test\\|", "Can't find end of Spoiler entity at byte offset 9");
-  check("🏟 🏟!", "Character '!' is reserved and must be escaped with the preceding '\\'");
-  check("🏟 🏟![", "Can't find end of CustomEmoji entity at byte offset 9");
-  check("🏟 🏟![👍", "Can't find end of CustomEmoji entity at byte offset 9");
-  check("🏟 🏟![👍]", "Custom emoji entity must contain a tg://emoji URL");
-  check("🏟 🏟![👍](tg://emoji?id=1234", "Can't find end of a custom emoji URL at byte offset 17");
-  check("🏟 🏟![👍](t://emoji?id=1234)", "Custom emoji URL must have scheme tg");
-  check("🏟 🏟![👍](tg:emojis?id=1234)", 'Custom emoji URL must have host "emoji"');
-  check("🏟 🏟![👍](tg://emoji#test)", "Custom emoji URL must have an emoji identifier");
-  check("🏟 🏟![👍](tg://emoji?test=1#&id=25)", "Custom emoji URL must have an emoji identifier");
-  check("🏟 🏟![👍](tg://emoji?test=1231&id=025)", "Invalid custom emoji identifier specified");
-
-  check("", "", []);
-  check("\\\\", "\\", []);
-  check("\\\\\\", "\\\\", []);
-  check("\\\\\\\\\\_\\*\\`", "\\\\_*`", []);
-  check("➡️ ➡️", "➡️ ➡️", []);
-  check("🏟 🏟``", "🏟 🏟", []);
-  check("🏟 🏟_abac \\* asd _", "🏟 🏟abac * asd ", [new MessageEntity(MessageEntityType.Italic, 5, 11)]);
-  check("🏟 \\.🏟_🏟\\. 🏟_", "🏟 .🏟🏟. 🏟", [new MessageEntity(MessageEntityType.Italic, 6, 6)]);
-  check("\\\\\\a\\b\\c\\d\\e\\f\\1\\2\\3\\4\\➡️\\", "\\abcdef1234\\➡️\\", []);
-  check("➡️ ➡️_➡️ ➡️_", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Italic, 5, 5)]);
-  check("➡️ ➡️_➡️ ➡️_*➡️ ➡️*", "➡️ ➡️➡️ ➡️➡️ ➡️", [
-    new MessageEntity(MessageEntityType.Italic, 5, 5),
-    new MessageEntity(MessageEntityType.Bold, 10, 5),
-  ]);
-  check("🏟 🏟_🏟 \\.🏟_", "🏟 🏟🏟 .🏟", [new MessageEntity(MessageEntityType.Italic, 5, 6)]);
-  check("🏟 🏟_🏟 *🏟*_", "🏟 🏟🏟 🏟", [
-    new MessageEntity(MessageEntityType.Italic, 5, 5),
-    new MessageEntity(MessageEntityType.Bold, 8, 2),
-  ]);
-  check("🏟 🏟_🏟 __🏟___", "🏟 🏟🏟 🏟", [
-    new MessageEntity(MessageEntityType.Italic, 5, 5),
-    new MessageEntity(MessageEntityType.Underline, 8, 2),
-  ]);
-  check("🏟 🏟__🏟 _🏟_ __", "🏟 🏟🏟 🏟 ", [
-    new MessageEntity(MessageEntityType.Underline, 5, 6),
-    new MessageEntity(MessageEntityType.Italic, 8, 2),
-  ]);
-  check("🏟 🏟__🏟 _🏟_\\___", "🏟 🏟🏟 🏟_", [
-    new MessageEntity(MessageEntityType.Underline, 5, 6),
-    new MessageEntity(MessageEntityType.Italic, 8, 2),
-  ]);
-  check("🏟 🏟`🏟 🏟```", "🏟 🏟🏟 🏟", [new MessageEntity(MessageEntityType.Code, 5, 5)]);
-  check("🏟 🏟```🏟 🏟```", "🏟 🏟 🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
-  check("🏟 🏟```🏟\n🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
-  check("🏟 🏟```🏟\r🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
-  check("🏟 🏟```🏟\n\r🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
-  check("🏟 🏟```🏟\r\n🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
-  check("🏟 🏟```🏟\n\n🏟```", "🏟 🏟\n🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
-  check("🏟 🏟```🏟\r\r🏟```", "🏟 🏟\r🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
-  check("🏟 🏟```🏟 \\\\\\`🏟```", "🏟 🏟 \\`🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 5, encode("🏟"))]);
-  check("🏟 🏟**", "🏟 🏟", []);
-  check("||test||", "test", [new MessageEntity(MessageEntityType.Spoiler, 0, 4)]);
-  check("🏟 🏟``", "🏟 🏟", []);
-  check("🏟 🏟``````", "🏟 🏟", []);
-  check("🏟 🏟____", "🏟 🏟", []);
-  check("`_* *_`__*` `*__", "_* *_ ", [
-    new MessageEntity(MessageEntityType.Code, 0, 5),
-    new MessageEntity(MessageEntityType.Code, 5, 1),
-    new MessageEntity(MessageEntityType.Bold, 5, 1),
-    new MessageEntity(MessageEntityType.Underline, 5, 1),
-  ]);
-  check("_* * ` `_", "   ", [
-    new MessageEntity(MessageEntityType.Italic, 0, 3),
-    new MessageEntity(MessageEntityType.Bold, 0, 1),
-    new MessageEntity(MessageEntityType.Code, 2, 1),
-  ]);
-  check("[](telegram.org)", "", []);
-  check("[ ](telegram.org)", " ", [new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/"))]);
-  check("[ ](as)", " ", []);
-  check("[telegram\\.org]", "telegram.org", [
-    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.org/")),
-  ]);
-  check("[telegram\\.org]a", "telegram.orga", [
-    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.org/")),
-  ]);
-  check("[telegram\\.org](telegram.dog)", "telegram.org", [
-    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.dog/")),
-  ]);
-  check("[telegram\\.org](https://telegram.dog?)", "telegram.org", [
-    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("https://telegram.dog/?")),
-  ]);
-  check("[telegram\\.org](https://telegram.dog?\\\\\\()", "telegram.org", [
-    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("https://telegram.dog/?\\(")),
-  ]);
-  check("[telegram\\.org]()", "telegram.org", []);
-  check("[telegram\\.org](asdasd)", "telegram.org", []);
-  check("[telegram\\.org](tg:user?id=123456)", "telegram.org", [
-    new MessageEntity(MessageEntityType.MentionName, 0, 12, new UserId(123456n)),
-  ]);
-  check("🏟 🏟![👍](TG://EMoJI/?test=1231&id=25#id=32)a", "🏟 🏟👍a", [
-    new MessageEntity(MessageEntityType.CustomEmoji, 5, 2, new CustomEmojiId(25n)),
-  ]);
-});
-
 Deno.test("parse html", () => {
   const check = (text: string, result: string, entities?: MessageEntity[]) => {
     const str = encode(text);
@@ -1103,5 +956,152 @@ Deno.test("parse html", () => {
   check('🏟 🏟<b aba   =   caba><tg-emoji emoji-id="1">🏟</tg-emoji>1</b>', "🏟 🏟🏟1", [
     new MessageEntity(MessageEntityType.Bold, 5, 3),
     new MessageEntity(MessageEntityType.CustomEmoji, 5, 2, new CustomEmojiId(1n)),
+  ]);
+});
+
+Deno.test("parse markdown v2", () => {
+  const check = (text: string, result: string, entities?: MessageEntity[]) => {
+    const str = encode(text);
+    if (entities == null) {
+      try {
+        parseMarkdownV2(str);
+      } catch (err) {
+        assert(err instanceof Error);
+        assertStrictEquals(err.message, result);
+      }
+    } else {
+      const parsed = parseMarkdownV2(str);
+      assertStrictEquals(decode(parsed.text), result);
+      assertEquals(parsed.entities, entities);
+    }
+  };
+
+  const reservedCharacters = encode("]()>#+-=|{}.!");
+  const beginCharacters = encode("_*[~`");
+
+  for (let codepoint = 1; codepoint < 126; codepoint++) {
+    if (beginCharacters.includes(codepoint)) {
+      continue;
+    }
+    const text = decode(Uint8Array.of(codepoint));
+    if (!reservedCharacters.includes(codepoint)) {
+      check(text, text, []);
+    } else {
+      check(text, `Character '${text}' is reserved and must be escaped with the preceding '\\'`);
+      const escapedText = "\\" + text;
+      check(escapedText, text, []);
+    }
+  }
+
+  check("🏟 🏟_abacaba", "Can't find end of Italic entity at byte offset 9");
+  check("🏟 🏟_abac * asd ", "Can't find end of Bold entity at byte offset 15");
+  check("🏟 🏟_abac * asd _", "Can't find end of Italic entity at byte offset 21");
+  check("🏟 🏟`", "Can't find end of Code entity at byte offset 9");
+  check("🏟 🏟```", "Can't find end of Pre entity at byte offset 9");
+  check("🏟 🏟```a", "Can't find end of Pre entity at byte offset 9");
+  check("🏟 🏟```a ", "Can't find end of PreCode entity at byte offset 9");
+  check("🏟 🏟__🏟 🏟_", "Can't find end of Italic entity at byte offset 20");
+  check("🏟 🏟_🏟 🏟__", "Can't find end of Underline entity at byte offset 19");
+  check("🏟 🏟```🏟 🏟`", "Can't find end of Code entity at byte offset 21");
+  check("🏟 🏟```🏟 🏟_", "Can't find end of PreCode entity at byte offset 9");
+  check("🏟 🏟```🏟 🏟\\`", "Can't find end of PreCode entity at byte offset 9");
+  check("[telegram\\.org](asd\\)", "Can't find end of a URL at byte offset 16");
+  check("[telegram\\.org](", "Can't find end of a URL at byte offset 16");
+  check("[telegram\\.org](asd", "Can't find end of a URL at byte offset 16");
+  check("🏟 🏟__🏟 _🏟___", "Can't find end of Italic entity at byte offset 23");
+  check("🏟 🏟__", "Can't find end of Underline entity at byte offset 9");
+  check("🏟 🏟||test\\|", "Can't find end of Spoiler entity at byte offset 9");
+  check("🏟 🏟!", "Character '!' is reserved and must be escaped with the preceding '\\'");
+  check("🏟 🏟![", "Can't find end of CustomEmoji entity at byte offset 9");
+  check("🏟 🏟![👍", "Can't find end of CustomEmoji entity at byte offset 9");
+  check("🏟 🏟![👍]", "Custom emoji entity must contain a tg://emoji URL");
+  check("🏟 🏟![👍](tg://emoji?id=1234", "Can't find end of a custom emoji URL at byte offset 17");
+  check("🏟 🏟![👍](t://emoji?id=1234)", "Custom emoji URL must have scheme tg");
+  check("🏟 🏟![👍](tg:emojis?id=1234)", 'Custom emoji URL must have host "emoji"');
+  check("🏟 🏟![👍](tg://emoji#test)", "Custom emoji URL must have an emoji identifier");
+  check("🏟 🏟![👍](tg://emoji?test=1#&id=25)", "Custom emoji URL must have an emoji identifier");
+  check("🏟 🏟![👍](tg://emoji?test=1231&id=025)", "Invalid custom emoji identifier specified");
+
+  check("", "", []);
+  check("\\\\", "\\", []);
+  check("\\\\\\", "\\\\", []);
+  check("\\\\\\\\\\_\\*\\`", "\\\\_*`", []);
+  check("➡️ ➡️", "➡️ ➡️", []);
+  check("🏟 🏟``", "🏟 🏟", []);
+  check("🏟 🏟_abac \\* asd _", "🏟 🏟abac * asd ", [new MessageEntity(MessageEntityType.Italic, 5, 11)]);
+  check("🏟 \\.🏟_🏟\\. 🏟_", "🏟 .🏟🏟. 🏟", [new MessageEntity(MessageEntityType.Italic, 6, 6)]);
+  check("\\\\\\a\\b\\c\\d\\e\\f\\1\\2\\3\\4\\➡️\\", "\\abcdef1234\\➡️\\", []);
+  check("➡️ ➡️_➡️ ➡️_", "➡️ ➡️➡️ ➡️", [new MessageEntity(MessageEntityType.Italic, 5, 5)]);
+  check("➡️ ➡️_➡️ ➡️_*➡️ ➡️*", "➡️ ➡️➡️ ➡️➡️ ➡️", [
+    new MessageEntity(MessageEntityType.Italic, 5, 5),
+    new MessageEntity(MessageEntityType.Bold, 10, 5),
+  ]);
+  check("🏟 🏟_🏟 \\.🏟_", "🏟 🏟🏟 .🏟", [new MessageEntity(MessageEntityType.Italic, 5, 6)]);
+  check("🏟 🏟_🏟 *🏟*_", "🏟 🏟🏟 🏟", [
+    new MessageEntity(MessageEntityType.Italic, 5, 5),
+    new MessageEntity(MessageEntityType.Bold, 8, 2),
+  ]);
+  check("🏟 🏟_🏟 __🏟___", "🏟 🏟🏟 🏟", [
+    new MessageEntity(MessageEntityType.Italic, 5, 5),
+    new MessageEntity(MessageEntityType.Underline, 8, 2),
+  ]);
+  check("🏟 🏟__🏟 _🏟_ __", "🏟 🏟🏟 🏟 ", [
+    new MessageEntity(MessageEntityType.Underline, 5, 6),
+    new MessageEntity(MessageEntityType.Italic, 8, 2),
+  ]);
+  check("🏟 🏟__🏟 _🏟_\\___", "🏟 🏟🏟 🏟_", [
+    new MessageEntity(MessageEntityType.Underline, 5, 6),
+    new MessageEntity(MessageEntityType.Italic, 8, 2),
+  ]);
+  check("🏟 🏟`🏟 🏟```", "🏟 🏟🏟 🏟", [new MessageEntity(MessageEntityType.Code, 5, 5)]);
+  check("🏟 🏟```🏟 🏟```", "🏟 🏟 🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
+  check("🏟 🏟```🏟\n🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
+  check("🏟 🏟```🏟\r🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
+  check("🏟 🏟```🏟\n\r🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
+  check("🏟 🏟```🏟\r\n🏟```", "🏟 🏟🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 2, encode("🏟"))]);
+  check("🏟 🏟```🏟\n\n🏟```", "🏟 🏟\n🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
+  check("🏟 🏟```🏟\r\r🏟```", "🏟 🏟\r🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 3, encode("🏟"))]);
+  check("🏟 🏟```🏟 \\\\\\`🏟```", "🏟 🏟 \\`🏟", [new MessageEntity(MessageEntityType.PreCode, 5, 5, encode("🏟"))]);
+  check("🏟 🏟**", "🏟 🏟", []);
+  check("||test||", "test", [new MessageEntity(MessageEntityType.Spoiler, 0, 4)]);
+  check("🏟 🏟``", "🏟 🏟", []);
+  check("🏟 🏟``````", "🏟 🏟", []);
+  check("🏟 🏟____", "🏟 🏟", []);
+  check("`_* *_`__*` `*__", "_* *_ ", [
+    new MessageEntity(MessageEntityType.Code, 0, 5),
+    new MessageEntity(MessageEntityType.Code, 5, 1),
+    new MessageEntity(MessageEntityType.Bold, 5, 1),
+    new MessageEntity(MessageEntityType.Underline, 5, 1),
+  ]);
+  check("_* * ` `_", "   ", [
+    new MessageEntity(MessageEntityType.Italic, 0, 3),
+    new MessageEntity(MessageEntityType.Bold, 0, 1),
+    new MessageEntity(MessageEntityType.Code, 2, 1),
+  ]);
+  check("[](telegram.org)", "", []);
+  check("[ ](telegram.org)", " ", [new MessageEntity(MessageEntityType.TextUrl, 0, 1, encode("http://telegram.org/"))]);
+  check("[ ](as)", " ", []);
+  check("[telegram\\.org]", "telegram.org", [
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.org/")),
+  ]);
+  check("[telegram\\.org]a", "telegram.orga", [
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.org/")),
+  ]);
+  check("[telegram\\.org](telegram.dog)", "telegram.org", [
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("http://telegram.dog/")),
+  ]);
+  check("[telegram\\.org](https://telegram.dog?)", "telegram.org", [
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("https://telegram.dog/?")),
+  ]);
+  check("[telegram\\.org](https://telegram.dog?\\\\\\()", "telegram.org", [
+    new MessageEntity(MessageEntityType.TextUrl, 0, 12, encode("https://telegram.dog/?\\(")),
+  ]);
+  check("[telegram\\.org]()", "telegram.org", []);
+  check("[telegram\\.org](asdasd)", "telegram.org", []);
+  check("[telegram\\.org](tg:user?id=123456)", "telegram.org", [
+    new MessageEntity(MessageEntityType.MentionName, 0, 12, new UserId(123456n)),
+  ]);
+  check("🏟 🏟![👍](TG://EMoJI/?test=1231&id=25#id=32)a", "🏟 🏟👍a", [
+    new MessageEntity(MessageEntityType.CustomEmoji, 5, 2, new CustomEmojiId(25n)),
   ]);
 });
