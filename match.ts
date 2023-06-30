@@ -2357,7 +2357,7 @@ export function cleanInputStringWithEntities(
         if (isUtf8CharacterBegin) {
           utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
         }
-        if (c === 0xe2 && pos + 2 < textSize) {
+        if (c === 0xe2 && (pos + 2) < textSize) {
           let next = text[pos + 1];
           if (next === 0x80) {
             next = text[pos + 2];
@@ -2368,7 +2368,7 @@ export function cleanInputStringWithEntities(
             }
           }
         }
-        if (c === 0xcc && pos + 1 < textSize) {
+        if (c === 0xcc && (pos + 1) < textSize) {
           const next = text[pos + 1];
           if (next === 0xb3 || next === 0xbf || next === 0x8a) {
             pos++;
@@ -2389,7 +2389,7 @@ export function cleanInputStringWithEntities(
     const entity = nestedEntitiesStack.at(-1)!.entity;
     throw new Error(
       "Entity beginning at UTF-16 offset " + entity.offset + " ends after the end of the text at UTF-16 offset " +
-        entity.offset + entity.length,
+        (entity.offset + entity.length),
     );
   }
 
@@ -2401,7 +2401,6 @@ export function removeInvalidEntities(
   entities: MessageEntity[],
 ): { entities: MessageEntity[]; result: [number, number] } {
   if (entities.length === 0) {
-    // fast path
     for (let pos = 0; pos < text.length; pos++) {
       const backPos = text.length - pos - 1;
       const c = text[backPos];
@@ -2457,7 +2456,7 @@ export function removeInvalidEntities(
           break;
         }
         entity.offset++;
-        entity.length++;
+        entity.length--;
         if (entity.length === 0) {
           CHECK(i === nestedEntitiesStack.length);
           nestedEntitiesStack.pop();
@@ -2474,7 +2473,7 @@ export function removeInvalidEntities(
         while (!isUtf8CharacterFirstCodeUnit(text[pos + 1])) {
           pos++;
         }
-        utf16Offset += c >= 0xf0 ? 1 : 0;
+        utf16Offset += (c >= 0xf0) ? 1 : 0;
         lastNonWhitespacePos = pos;
         lastNonWhitespaceUtf16Offset = utf16Offset;
         break;
@@ -2482,6 +2481,7 @@ export function removeInvalidEntities(
 
     utf16Offset++;
   }
+
   CHECK(nestedEntitiesStack.length === 0);
   CHECK(currentEntity === entities.length);
 

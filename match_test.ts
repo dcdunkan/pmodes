@@ -695,15 +695,11 @@ Deno.test("fix formatted text", () => {
     skipBotCommands = false,
     skipTrim = true,
   ) => {
-    const { entities: $entities, ok, text } = fixFormattedText(
-      encode(str),
-      entities,
-      allowEmpty,
-      skipNewEntities,
-      skipBotCommands,
-      true,
-      skipTrim,
-    );
+    const {
+      entities: $entities,
+      ok,
+      text,
+    } = fixFormattedText(encode(str), entities, allowEmpty, skipNewEntities, skipBotCommands, true, skipTrim);
     assert(ok);
     assertEquals(text, encode(expectedStr));
     assertEquals($entities, expectedEntities);
@@ -717,7 +713,15 @@ Deno.test("fix formatted text", () => {
     skipTrim: boolean,
   ) => {
     try {
-      fixFormattedText(encode(str), entities, allowEmpty, skipNewEntities, skipBotCommands, true, skipTrim);
+      fixFormattedText(
+        encode(str),
+        entities,
+        allowEmpty,
+        skipNewEntities,
+        skipBotCommands,
+        true,
+        skipTrim,
+      );
       assert(false);
     } catch (error) {
       assert(error instanceof Error);
@@ -779,11 +783,11 @@ Deno.test("fix formatted text", () => {
     }
     check(str, entities, fixedStr, fixedEntities, true, false, false, true);
 
-    const expectedStr = "a";
     if (i !== 33) {
       fixedEntities.at(-1)!.offset = 0;
       fixedEntities.at(-1)!.length = 1;
     }
+    const expectedStr = "a";
     check(str, entities, expectedStr, fixedEntities, false, false, false, false);
   }
 });
