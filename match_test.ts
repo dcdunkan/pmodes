@@ -17,6 +17,7 @@ import {
 } from "./match.ts";
 import { MessageEntity, MessageEntityType } from "./message_entity.ts";
 import { UserId } from "./user_id.ts";
+import { isSpace } from "./utilities.ts";
 
 function checkFn(fn: (text: Uint8Array) => [number, number][]) {
   return (text: string, expected: string[]) => {
@@ -684,8 +685,9 @@ Deno.test("url", () => {
   check("_.test.com", ["_.test.com"]);
 });
 
-Deno.test("fix formatted text", () => {
-  const check = (
+Deno.test("fix formatted text", async (t) => {
+  let count = 0;
+  const check = async (
     str: string,
     entities: MessageEntity[],
     expectedStr: string,
@@ -695,16 +697,18 @@ Deno.test("fix formatted text", () => {
     skipBotCommands = false,
     skipTrim = true,
   ) => {
-    const {
-      entities: $entities,
-      ok,
-      text,
-    } = fixFormattedText(encode(str), entities, allowEmpty, skipNewEntities, skipBotCommands, true, skipTrim);
-    assert(ok);
-    assertEquals(text, encode(expectedStr));
-    assertEquals($entities, expectedEntities);
+    await t.step((count++).toString(), () => {
+      const {
+        entities: $entities,
+        ok,
+        text,
+      } = fixFormattedText(encode(str), entities, allowEmpty, skipNewEntities, skipBotCommands, true, skipTrim);
+      assert(ok);
+      assertEquals(text, encode(expectedStr));
+      assertEquals($entities, expectedEntities);
+    });
   };
-  const checkError = (
+  const checkError = async (
     str: string,
     entities: MessageEntity[],
     allowEmpty: boolean,
@@ -712,20 +716,22 @@ Deno.test("fix formatted text", () => {
     skipBotCommands: boolean,
     skipTrim: boolean,
   ) => {
-    try {
-      fixFormattedText(
-        encode(str),
-        entities,
-        allowEmpty,
-        skipNewEntities,
-        skipBotCommands,
-        true,
-        skipTrim,
-      );
-      assert(false);
-    } catch (error) {
-      assert(error instanceof Error);
-    }
+    await t.step((count++).toString(), () => {
+      try {
+        fixFormattedText(
+          encode(str),
+          entities,
+          allowEmpty,
+          skipNewEntities,
+          skipBotCommands,
+          true,
+          skipTrim,
+        );
+        assert(false);
+      } catch (error) {
+        assert(error instanceof Error);
+      }
+    });
   };
 
   const str_: number[] = [];
@@ -743,21 +749,21 @@ Deno.test("fix formatted text", () => {
 
   let str = decode(Uint8Array.from(str_));
 
-  check(str, [], "", [], true, true, true, true);
-  check(str, [], "", [], true, true, false, true);
-  check(str, [], "", [], true, false, true, true);
-  check(str, [], "", [], true, false, false, true);
-  check(str, [], "", [], true, false, false, false);
-  checkError(str, [], false, false, false, false);
-  checkError(str, [], false, false, false, true);
+  await check(str, [], "", [], true, true, true, true);
+  await check(str, [], "", [], true, true, false, true);
+  await check(str, [], "", [], true, false, true, true);
+  await check(str, [], "", [], true, false, false, true);
+  await check(str, [], "", [], true, false, false, false);
+  await checkError(str, [], false, false, false, false);
+  await checkError(str, [], false, false, false, true);
 
-  check("  aba\n ", [], "  aba\n ", [], true, true, true, true);
-  check("  aba\n ", [], "aba", [], true, true, true, false);
-  check("  \n ", [], "", [], true, true, true, true);
-  check("  \n ", [], "", [], true, true, true, false);
-  checkError("  \n ", [], false, true, true, false);
+  await check("  aba\n ", [], "  aba\n ", [], true, true, true, true);
+  await check("  aba\n ", [], "aba", [], true, true, true, false);
+  await check("  \n ", [], "", [], true, true, true, true);
+  await check("  \n ", [], "", [], true, true, true, false);
+  await checkError("  \n ", [], false, true, true, false);
 
-  str = decode(mergeTypedArrays(Uint8Array.from(str_), encode("a  \r\n  ")));
+  str = str + "a  \r\n  ";
   const fixedStr = decode(mergeTypedArrays(Uint8Array.from(fixedStr_), encode("a  \n  ")));
 
   for (let i = 33; i <= 35; i++) {
@@ -766,29 +772,147 @@ Deno.test("fix formatted text", () => {
 
     const fixedEntities = entities;
     fixedEntities.at(-1)!.length = i - 1;
-    check(str, entities, fixedStr, fixedEntities, true, false, false, true);
+    await check(str, entities, fixedStr, fixedEntities, true, false, false, true);
 
     const expectedStr = encode(fixedStr).slice(0, 33);
     fixedEntities.at(-1)!.length = i === 33 ? 32 : 33;
-    check(str, entities, decode(expectedStr), fixedEntities, false, false, false, false);
+    await check(str, entities, decode(expectedStr), fixedEntities, false, false, false, false);
   }
 
   for (let i = 33; i <= 35; i++) {
     const entities: MessageEntity[] = [];
     entities.push(new MessageEntity(MessageEntityType.Bold, 0, i));
 
-    const fixedEntities = entities;
+    const fixedEntities: MessageEntity[] = [];
     if (i !== 33) {
       fixedEntities.push(new MessageEntity(MessageEntityType.Bold, 32, i - 33));
     }
-    check(str, entities, fixedStr, fixedEntities, true, false, false, true);
+    await check(str, entities, fixedStr, fixedEntities, true, false, false, true);
 
     if (i !== 33) {
       fixedEntities.at(-1)!.offset = 0;
       fixedEntities.at(-1)!.length = 1;
     }
     const expectedStr = "a";
-    check(str, entities, expectedStr, fixedEntities, false, false, false, false);
+    console.log({ input: entities, fixedEntities, expectedStr: encode(expectedStr) });
+    await check(str, entities, expectedStr, fixedEntities, false, false, false, false);
+  }
+
+  const str2 = encode("👉 👉  ");
+  for (let i = 0; i < 10; i++) {
+    const entities: MessageEntity[] = [];
+    entities.push(new MessageEntity(MessageEntityType.Bold, i, 1));
+    if (i !== 2 && i !== 5 && i !== 6) {
+      await checkError(decode(str2), entities, true, true, true, true);
+      await checkError(decode(str2), entities, false, false, false, false);
+    } else {
+      await check(decode(str2), entities, decode(str2), [], true, true, true, true);
+      await check(decode(str2), entities, decode(str2.slice(0, str2.length - 2)), [], false, false, false, false);
+    }
+  }
+
+  const str3 = encode("  /test @abaca #ORD $ABC  telegram.org ");
+  for (const skip_trim of [false, true]) {
+    const shift = skip_trim ? 2 : 0;
+    const expected_str = skip_trim ? str3 : str3.slice(2, str3.length - 3);
+
+    for (const skip_new_entities of [false, true]) {
+      for (const skip_bot_commands of [false, true]) {
+        const entities: MessageEntity[] = [];
+        if (!skip_new_entities) {
+          if (!skip_bot_commands) {
+            entities.push(new MessageEntity(MessageEntityType.BotCommand, shift, 5));
+          }
+          entities.push(new MessageEntity(MessageEntityType.Mention, shift + 6, 6));
+          entities.push(new MessageEntity(MessageEntityType.Hashtag, shift + 13, 4));
+          entities.push(new MessageEntity(MessageEntityType.Cashtag, shift + 18, 4));
+          entities.push(new MessageEntity(MessageEntityType.Url, shift + 24, 12));
+        }
+
+        await check(
+          decode(str3),
+          [],
+          decode(expected_str),
+          entities,
+          true,
+          skip_new_entities,
+          skip_bot_commands,
+          skip_trim,
+        );
+        await check(
+          decode(str3),
+          [],
+          decode(expected_str),
+          entities,
+          false,
+          skip_new_entities,
+          skip_bot_commands,
+          skip_trim,
+        );
+      }
+    }
+  }
+
+  const str4 = encode("aba \r\n caba ");
+  const user_id = new UserId(1n);
+  for (let length = 1; length <= 3; length++) {
+    for (let offset = 0; (offset + length) <= str4.length; offset++) {
+      for (
+        const type of [
+          MessageEntityType.Bold,
+          MessageEntityType.Url,
+          MessageEntityType.TextUrl,
+          MessageEntityType.MentionName,
+        ]
+      ) {
+        for (const skip_trim of [false, true]) {
+          const fixedStr = encode(skip_trim ? "aba \n caba " : "aba \n caba");
+          let fixed_length = offset <= 4 && offset + length >= 5 ? length - 1 : length;
+          let fixed_offset = offset >= 5 ? offset - 1 : offset;
+          if ((fixed_offset) >= fixedStr.length) {
+            fixed_length = 0;
+          }
+          while ((fixed_offset + fixed_length) > fixedStr.length) {
+            fixed_length--;
+          }
+          if (type == MessageEntityType.Bold || type == MessageEntityType.Url) {
+            while (
+              fixed_length > 0 &&
+              (fixedStr[fixed_offset] === CODEPOINTS[" "] || fixedStr[fixed_offset] == CODEPOINTS["\n"])
+            ) {
+              fixed_offset++;
+              fixed_length--;
+            }
+          }
+
+          const entities: MessageEntity[] = [];
+          entities.push(new MessageEntity(type, offset, length));
+          if (type === MessageEntityType.TextUrl) {
+            entities.at(-1)!.argument = encode("t.me");
+          } else if (type === MessageEntityType.MentionName) {
+            entities.at(-1)!.userId = user_id;
+          }
+          const fixed_entities: MessageEntity[] = [];
+          if (fixed_length > 0) {
+            for (let i = 0; i < length; i++) {
+              if (
+                !isSpace(str4[offset + i]) || type == MessageEntityType.TextUrl ||
+                type === MessageEntityType.MentionName
+              ) {
+                fixed_entities.push(new MessageEntity(type, fixed_offset, fixed_length));
+                if (type == MessageEntityType.TextUrl) {
+                  fixed_entities.at(-1)!.argument = encode("t.me");
+                } else if (type == MessageEntityType.MentionName) {
+                  fixed_entities.at(-1)!.userId = user_id;
+                }
+                break;
+              }
+            }
+          }
+          await check(decode(str4), entities, decode(fixedStr), fixed_entities, true, false, false, skip_trim);
+        }
+      }
+    }
   }
 });
 

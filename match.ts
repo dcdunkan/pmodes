@@ -2469,7 +2469,7 @@ export function removeInvalidEntities(
       case CODEPOINTS["\n"]:
       case 32:
         break;
-      default:
+      default: {
         while (!isUtf8CharacterFirstCodeUnit(text[pos + 1])) {
           pos++;
         }
@@ -2477,6 +2477,7 @@ export function removeInvalidEntities(
         lastNonWhitespacePos = pos;
         lastNonWhitespaceUtf16Offset = utf16Offset;
         break;
+      }
     }
 
     utf16Offset++;
