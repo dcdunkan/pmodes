@@ -1304,7 +1304,7 @@ export function fixEntityOffsets(text: Uint8Array, entities: MessageEntity[]): M
   for (const entity of entities) {
     let cnt = 2;
     const entityBegin = entity.offset;
-    const entityEnd = entity.offset - entity.length;
+    const entityEnd = entity.offset + entity.length;
 
     let pos = (ptr - begin) | 0;
     if (entityBegin === pos) {
