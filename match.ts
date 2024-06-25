@@ -1244,8 +1244,7 @@ export function removeIntersectingEntities(entities: MessageEntity[]): MessageEn
     if (entities[i].offset >= lastEntityEnd) {
       lastEntityEnd = entities[i].offset + entities[i].length;
       if (i !== leftEntities) {
-        const removed = entities.splice(i, 1);
-        entities[leftEntities] = removed[0];
+        entities[leftEntities] = entities[i];
       }
       leftEntities++;
     }
@@ -2431,7 +2430,7 @@ export function removeInvalidEntities(
 
       if (lastNonWhitespaceUtf16Offset >= entity.offset || isHiddenDataEntity(entity.type)) {
         // keep entity
-        // TODO check entity for validness, for example, that mentions, hashtags, cashtags and URLs are valid
+        // TODO: check entity for validness, for example, that mentions, hashtags, cashtags and URLs are valid
       } else {
         entity.length = 0;
       }

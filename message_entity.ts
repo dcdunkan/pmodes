@@ -121,6 +121,15 @@ export class MessageEntity {
     }
   }
 
+  static of(
+    type: MessageEntityType,
+    offset: number,
+    length: number,
+    argument?: Uint8Array | UserId | number | CustomEmojiId,
+  ) {
+    return new MessageEntity(type, offset, length, argument);
+  }
+
   equal(other: MessageEntity) {
     return this.offset === other.offset && this.length === other.length && this.type === other.type &&
       this.mediaTimestamp === other.mediaTimestamp && areTypedArraysEqual(this.argument, other.argument) &&

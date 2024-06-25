@@ -14,9 +14,11 @@ import {
   isEmailAddress,
   parseHtml,
   parseMarkdownV2,
+  sortEntities,
 } from "./match.ts";
 import { MessageEntity, MessageEntityType } from "./message_entity.ts";
 import { UserId } from "./user_id.ts";
+import { utf8utf16Length, utf8utf16Substr } from "./utf8.ts";
 import { isSpace } from "./utilities.ts";
 
 function checkFn(fn: (text: Uint8Array) => [number, number][]) {
@@ -685,10 +687,10 @@ Deno.test("url", () => {
   check("_.test.com", ["_.test.com"]);
 });
 
-function cloneInstance<T>(instance: T): T {
+function clone<T>(instance: T): T {
   if (Array.isArray(instance)) {
     // @ts-ignore let's ignore until i fix it properly
-    return instance.map((i) => cloneInstance(i));
+    return instance.map((i) => clone(i));
   } else {
     const prototype = Object.getPrototypeOf(instance);
     return Object.assign(Object.create(prototype), instance);
@@ -797,14 +799,14 @@ Deno.test("fix formatted text", async (t) => {
     if (i !== 33) {
       fixedEntities.push(new MessageEntity(MessageEntityType.Bold, 32, i - 33));
     }
-    await check(str, cloneInstance(entities), fixedStr, fixedEntities, true, false, false, true);
+    await check(str, clone(entities), fixedStr, fixedEntities, true, false, false, true);
 
     if (i !== 33) {
       fixedEntities.at(-1)!.offset = 0;
       fixedEntities.at(-1)!.length = 1;
     }
     const expectedStr = "a";
-    await check(str, cloneInstance(entities), expectedStr, fixedEntities, false, false, false, false);
+    await check(str, clone(entities), expectedStr, fixedEntities, false, false, false, false);
   }
 
   const str2 = encode("👉 👉  ");
@@ -925,6 +927,393 @@ Deno.test("fix formatted text", async (t) => {
       }
     }
   }
+
+  const str5 = encode("aba caba");
+  for (let length = -10; length <= 10; length++) {
+    for (let offset = -10; offset <= 10; offset++) {
+      const entities: MessageEntity[] = [];
+      entities.push(new MessageEntity(MessageEntityType.Bold, offset, length));
+
+      if (length < 0 || offset < 0 || (length > 0 && (length + offset) > str5.length)) {
+        await checkError(decode(str5), clone(entities), true, false, false, false);
+        await checkError(decode(str5), clone(entities), false, false, false, true);
+        continue;
+      }
+
+      const fixedEntities: MessageEntity[] = [];
+      if (length > 0) {
+        if (offset === 3) {
+          if (length >= 2) {
+            fixedEntities.push(new MessageEntity(MessageEntityType.Bold, offset + 1, length - 1));
+          }
+        } else {
+          fixedEntities.push(new MessageEntity(MessageEntityType.Bold, offset, length));
+        }
+      }
+      await check(decode(str5), clone(entities), decode(str5), fixedEntities, true, false, false, false);
+      await check(decode(str5), clone(entities), decode(str5), fixedEntities, false, false, false, true);
+    }
+  }
+
+  const str6 = encode("abadcaba");
+  for (let length = 1; length <= 7; length++) {
+    for (let offset = 0; offset <= 8 - length; offset++) {
+      for (let length2 = 1; length2 <= 7; length2++) {
+        for (let offset2 = 0; offset2 <= 8 - length2; offset2++) {
+          if (offset != offset2) {
+            const entities: MessageEntity[] = [];
+            entities.push(new MessageEntity(MessageEntityType.TextUrl, offset, length, encode("t.me")));
+            entities.push(new MessageEntity(MessageEntityType.TextUrl, offset2, length2, encode("t.me")));
+            entities.push(new MessageEntity(MessageEntityType.TextUrl, offset2 + length2, 1));
+            let fixedEntities = clone(entities);
+            fixedEntities.pop();
+            fixedEntities = sortEntities(fixedEntities);
+            if (fixedEntities[0].offset + fixedEntities[0].length > fixedEntities[1].offset) {
+              fixedEntities.pop();
+            }
+            await check(decode(str6), entities, decode(str6), fixedEntities, false, false, false, false);
+          }
+        }
+      }
+    }
+  }
+
+  for (const text of [" \n ➡️ ➡️ ➡️ ➡️  \n ", "\n\n\nab cd ef gh        "]) {
+    const str = encode(text);
+    const entities: MessageEntity[] = [];
+    const fixedEntities: MessageEntity[] = [];
+
+    const length = utf8utf16Length(str);
+    for (let i = 0; i < 10; i++) {
+      if (((i + 1) * 3) + 2 <= length) {
+        entities.push(new MessageEntity(MessageEntityType.Bold, (i + 1) * 3, 2));
+      }
+      if ((i + 2) * 3 <= length) {
+        entities.push(new MessageEntity(MessageEntityType.Italic, ((i + 1) * 3) + 2, 1));
+      }
+
+      if (i < 4) {
+        fixedEntities.push(new MessageEntity(MessageEntityType.Bold, i * 3, 2));
+      }
+    }
+
+    await check(decode(str), entities, decode(utf8utf16Substr(str, 3, 11)), fixedEntities, false, false, false, false);
+  }
+
+  for (const text of ["\t", "\r", "\n", "\t ", "\r ", "\n "]) {
+    for (const type of [MessageEntityType.Bold, MessageEntityType.TextUrl]) {
+      const entity = MessageEntity.of(type, 0, 1, encode("http://telegram.org/"));
+      await check(text, [entity], "", [], true, false, false, true);
+    }
+  }
+
+  await check(
+    "\r ",
+    [MessageEntity.of(MessageEntityType.Bold, 0, 2), MessageEntity.of(MessageEntityType.Underline, 0, 1)],
+    "",
+    [],
+    true,
+    false,
+    false,
+    true,
+  );
+  await check(
+    "a \r",
+    [MessageEntity.of(MessageEntityType.Bold, 0, 3), MessageEntity.of(MessageEntityType.Underline, 2, 1)],
+    "a ",
+    [MessageEntity.of(MessageEntityType.Bold, 0, 2)],
+    true,
+    false,
+    false,
+    true,
+  );
+  await check(
+    "a \r ",
+    [MessageEntity.of(MessageEntityType.Bold, 0, 4), MessageEntity.of(MessageEntityType.Underline, 2, 1)],
+    "a  ",
+    [MessageEntity.of(MessageEntityType.Bold, 0, 2)],
+    true,
+    false,
+    false,
+    true,
+  );
+  await check(
+    "a \r b",
+    [MessageEntity.of(MessageEntityType.Bold, 0, 5), MessageEntity.of(MessageEntityType.Underline, 2, 1)],
+    "a  b",
+    [MessageEntity.of(MessageEntityType.Bold, 0, 2), MessageEntity.of(MessageEntityType.Bold, 3, 1)],
+    true,
+    false,
+    false,
+    true,
+  );
+
+  await check(
+    "a\rbc\r",
+    [
+      MessageEntity.of(MessageEntityType.Italic, 0, 1),
+      MessageEntity.of(MessageEntityType.Bold, 0, 2),
+      MessageEntity.of(MessageEntityType.Italic, 3, 2),
+      MessageEntity.of(MessageEntityType.Bold, 3, 1),
+    ],
+    "abc",
+    [
+      MessageEntity.of(MessageEntityType.Bold, 0, 1),
+      MessageEntity.of(MessageEntityType.Italic, 0, 1),
+      MessageEntity.of(MessageEntityType.Bold, 2, 1),
+      MessageEntity.of(MessageEntityType.Italic, 2, 1),
+    ],
+  );
+  await check(
+    "a ",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 2), MessageEntity.of(MessageEntityType.Bold, 0, 1)],
+    "a",
+    [MessageEntity.of(MessageEntityType.Bold, 0, 1), MessageEntity.of(MessageEntityType.Italic, 0, 1)],
+    false,
+    false,
+    false,
+    false,
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 1, 1), MessageEntity.of(MessageEntityType.Italic, 0, 1)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 2)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 1, 1), MessageEntity.of(MessageEntityType.Italic, 1, 1)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 1, 1)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 2), MessageEntity.of(MessageEntityType.Italic, 1, 2)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 3)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 2), MessageEntity.of(MessageEntityType.Italic, 2, 1)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 3)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 1), MessageEntity.of(MessageEntityType.Italic, 2, 1)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 1), MessageEntity.of(MessageEntityType.Italic, 2, 1)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 2), MessageEntity.of(MessageEntityType.Bold, 1, 2)],
+    "abc",
+    [
+      MessageEntity.of(MessageEntityType.Italic, 0, 1),
+      MessageEntity.of(MessageEntityType.Bold, 1, 2),
+      MessageEntity.of(MessageEntityType.Italic, 1, 1),
+    ],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 2), MessageEntity.of(MessageEntityType.Bold, 2, 1)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 2), MessageEntity.of(MessageEntityType.Bold, 2, 1)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 1), MessageEntity.of(MessageEntityType.Bold, 2, 1)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Italic, 0, 1), MessageEntity.of(MessageEntityType.Bold, 2, 1)],
+  );
+  await check("@tests @tests", [MessageEntity.of(MessageEntityType.Italic, 0, 13)], "@tests @tests", [
+    MessageEntity.of(MessageEntityType.Mention, 0, 6),
+    MessageEntity.of(MessageEntityType.Italic, 0, 6),
+    MessageEntity.of(MessageEntityType.Mention, 7, 6),
+    MessageEntity.of(MessageEntityType.Italic, 7, 6),
+  ]);
+
+  // __a~b~__
+  await check(
+    "ab",
+    [MessageEntity.of(MessageEntityType.Underline, 0, 2), MessageEntity.of(MessageEntityType.Strikethrough, 1, 1)],
+    "ab",
+    [
+      MessageEntity.of(MessageEntityType.Underline, 0, 1),
+      MessageEntity.of(MessageEntityType.Underline, 1, 1),
+      MessageEntity.of(MessageEntityType.Strikethrough, 1, 1),
+    ],
+  );
+  await check(
+    "ab",
+    [
+      MessageEntity.of(MessageEntityType.Underline, 0, 1),
+      MessageEntity.of(MessageEntityType.Underline, 1, 1),
+      MessageEntity.of(MessageEntityType.Strikethrough, 1, 1),
+    ],
+    "ab",
+    [
+      MessageEntity.of(MessageEntityType.Underline, 0, 1),
+      MessageEntity.of(MessageEntityType.Underline, 1, 1),
+      MessageEntity.of(MessageEntityType.Strikethrough, 1, 1),
+    ],
+  );
+  await check(
+    "ab",
+    [MessageEntity.of(MessageEntityType.Strikethrough, 0, 2), MessageEntity.of(MessageEntityType.Underline, 1, 1)],
+    "ab",
+    [
+      MessageEntity.of(MessageEntityType.Strikethrough, 0, 1),
+      MessageEntity.of(MessageEntityType.Underline, 1, 1),
+      MessageEntity.of(MessageEntityType.Strikethrough, 1, 1),
+    ],
+  );
+  await check(
+    "ab",
+    [
+      MessageEntity.of(MessageEntityType.Strikethrough, 0, 1),
+      MessageEntity.of(MessageEntityType.Strikethrough, 1, 1),
+      MessageEntity.of(MessageEntityType.Underline, 1, 1),
+    ],
+    "ab",
+    [
+      MessageEntity.of(MessageEntityType.Strikethrough, 0, 1),
+      MessageEntity.of(MessageEntityType.Underline, 1, 1),
+      MessageEntity.of(MessageEntityType.Strikethrough, 1, 1),
+    ],
+  );
+
+  // __||a||b__
+  await check(
+    "ab",
+    [MessageEntity.of(MessageEntityType.Underline, 0, 2), MessageEntity.of(MessageEntityType.Spoiler, 0, 1)],
+    "ab",
+    [MessageEntity.of(MessageEntityType.Underline, 0, 2), MessageEntity.of(MessageEntityType.Spoiler, 0, 1)],
+  );
+  await check(
+    "ab",
+    [
+      MessageEntity.of(MessageEntityType.Underline, 0, 1),
+      MessageEntity.of(MessageEntityType.Underline, 1, 1),
+      MessageEntity.of(MessageEntityType.Spoiler, 0, 1),
+    ],
+    "ab",
+    [MessageEntity.of(MessageEntityType.Underline, 0, 2), MessageEntity.of(MessageEntityType.Spoiler, 0, 1)],
+  );
+
+  // _*a*_\r_*b*_
+  await check(
+    "a\rb",
+    [
+      MessageEntity.of(MessageEntityType.Bold, 0, 1),
+      MessageEntity.of(MessageEntityType.Italic, 0, 1),
+      MessageEntity.of(MessageEntityType.Bold, 2, 1),
+      MessageEntity.of(MessageEntityType.Italic, 2, 1),
+    ],
+    "ab",
+    [MessageEntity.of(MessageEntityType.Bold, 0, 2), MessageEntity.of(MessageEntityType.Italic, 0, 2)],
+  );
+  await check(
+    "a\nb",
+    [
+      MessageEntity.of(MessageEntityType.Bold, 0, 1),
+      MessageEntity.of(MessageEntityType.Italic, 0, 1),
+      MessageEntity.of(MessageEntityType.Bold, 2, 1),
+      MessageEntity.of(MessageEntityType.Italic, 2, 1),
+    ],
+    "a\nb",
+    [
+      MessageEntity.of(MessageEntityType.Bold, 0, 1),
+      MessageEntity.of(MessageEntityType.Italic, 0, 1),
+      MessageEntity.of(MessageEntityType.Bold, 2, 1),
+      MessageEntity.of(MessageEntityType.Italic, 2, 1),
+    ],
+  );
+
+  // ||`a`||
+  await check(
+    "a",
+    [MessageEntity.of(MessageEntityType.Pre, 0, 1), MessageEntity.of(MessageEntityType.Spoiler, 0, 1)],
+    "a",
+    [MessageEntity.of(MessageEntityType.Pre, 0, 1)],
+  );
+  await check(
+    "a",
+    [MessageEntity.of(MessageEntityType.Spoiler, 0, 1), MessageEntity.of(MessageEntityType.Pre, 0, 1)],
+    "a",
+    [MessageEntity.of(MessageEntityType.Pre, 0, 1)],
+  );
+
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Pre, 0, 3), MessageEntity.of(MessageEntityType.Strikethrough, 1, 1)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Pre, 0, 3)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Pre, 1, 1), MessageEntity.of(MessageEntityType.Strikethrough, 0, 3)],
+    "abc",
+    [
+      MessageEntity.of(MessageEntityType.Strikethrough, 0, 1),
+      MessageEntity.of(MessageEntityType.Pre, 1, 1),
+      MessageEntity.of(MessageEntityType.Strikethrough, 2, 1),
+    ],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Pre, 1, 1), MessageEntity.of(MessageEntityType.Strikethrough, 1, 2)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Pre, 1, 1), MessageEntity.of(MessageEntityType.Strikethrough, 2, 1)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Pre, 1, 1), MessageEntity.of(MessageEntityType.Strikethrough, 0, 2)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.Strikethrough, 0, 1), MessageEntity.of(MessageEntityType.Pre, 1, 1)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.Pre, 0, 3), MessageEntity.of(MessageEntityType.BlockQuote, 1, 1)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.BlockQuote, 1, 1)],
+  );
+  await check(
+    "abc",
+    [MessageEntity.of(MessageEntityType.BlockQuote, 0, 3), MessageEntity.of(MessageEntityType.Pre, 1, 1)],
+    "abc",
+    [MessageEntity.of(MessageEntityType.BlockQuote, 0, 3), MessageEntity.of(MessageEntityType.Pre, 1, 1)],
+  );
+
+  await check("example.com", [], "example.com", [MessageEntity.of(MessageEntityType.Url, 0, 11)]);
+  await check("example.com", [MessageEntity.of(MessageEntityType.Pre, 0, 3)], "example.com", [
+    MessageEntity.of(MessageEntityType.Pre, 0, 3),
+  ]);
+  await check("example.com", [MessageEntity.of(MessageEntityType.BlockQuote, 0, 3)], "example.com", [
+    MessageEntity.of(MessageEntityType.BlockQuote, 0, 3),
+  ]);
+  await check("example.com", [MessageEntity.of(MessageEntityType.BlockQuote, 0, 11)], "example.com", [
+    MessageEntity.of(MessageEntityType.BlockQuote, 0, 11),
+    MessageEntity.of(MessageEntityType.Url, 0, 11),
+  ]);
+  await check("example.com", [MessageEntity.of(MessageEntityType.Italic, 0, 11)], "example.com", [
+    MessageEntity.of(MessageEntityType.Url, 0, 11),
+    MessageEntity.of(MessageEntityType.Italic, 0, 11),
+  ]);
+  await check("example.com", [MessageEntity.of(MessageEntityType.Italic, 0, 3)], "example.com", [
+    MessageEntity.of(MessageEntityType.Url, 0, 11),
+    MessageEntity.of(MessageEntityType.Italic, 0, 3),
+  ]);
+  await check("example.com a", [MessageEntity.of(MessageEntityType.Italic, 0, 13)], "example.com a", [
+    MessageEntity.of(MessageEntityType.Url, 0, 11),
+    MessageEntity.of(MessageEntityType.Italic, 0, 11),
+    MessageEntity.of(MessageEntityType.Italic, 12, 1),
+  ]);
+  await check("a example.com", [MessageEntity.of(MessageEntityType.Italic, 0, 13)], "a example.com", [
+    MessageEntity.of(MessageEntityType.Italic, 0, 2),
+    MessageEntity.of(MessageEntityType.Url, 2, 11),
+    MessageEntity.of(MessageEntityType.Italic, 2, 11),
+  ]);
 });
 
 Deno.test("parse html", () => {
