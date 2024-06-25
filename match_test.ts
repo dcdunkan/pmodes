@@ -685,6 +685,16 @@ Deno.test("url", () => {
   check("_.test.com", ["_.test.com"]);
 });
 
+function cloneInstance<T>(instance: T): T {
+  if (Array.isArray(instance)) {
+    // @ts-ignore let's ignore until i fix it properly
+    return instance.map((i) => cloneInstance(i));
+  } else {
+    const prototype = Object.getPrototypeOf(instance);
+    return Object.assign(Object.create(prototype), instance);
+  }
+}
+
 Deno.test("fix formatted text", async (t) => {
   let count = 0;
   const check = async (
@@ -787,15 +797,14 @@ Deno.test("fix formatted text", async (t) => {
     if (i !== 33) {
       fixedEntities.push(new MessageEntity(MessageEntityType.Bold, 32, i - 33));
     }
-    await check(str, entities, fixedStr, fixedEntities, true, false, false, true);
+    await check(str, cloneInstance(entities), fixedStr, fixedEntities, true, false, false, true);
 
     if (i !== 33) {
       fixedEntities.at(-1)!.offset = 0;
       fixedEntities.at(-1)!.length = 1;
     }
     const expectedStr = "a";
-    console.log({ input: entities, fixedEntities, expectedStr: encode(expectedStr) });
-    await check(str, entities, expectedStr, fixedEntities, false, false, false, false);
+    await check(str, cloneInstance(entities), expectedStr, fixedEntities, false, false, false, false);
   }
 
   const str2 = encode("👉 👉  ");
@@ -814,7 +823,9 @@ Deno.test("fix formatted text", async (t) => {
   const str3 = encode("  /test @abaca #ORD $ABC  telegram.org ");
   for (const skip_trim of [false, true]) {
     const shift = skip_trim ? 2 : 0;
-    const expected_str = skip_trim ? str3 : str3.slice(2, str3.length - 3);
+    // Reminder: td::string::substr takes start and length as parameters, not start and end.
+    // Always add (+ start) to the 2nd argument they use, inside of .slice
+    const expected_str = skip_trim ? str3 : str3.slice(2, str3.length - 3 + 2);
 
     for (const skip_new_entities of [false, true]) {
       for (const skip_bot_commands of [false, true]) {
@@ -869,7 +880,7 @@ Deno.test("fix formatted text", async (t) => {
           const fixedStr = encode(skip_trim ? "aba \n caba " : "aba \n caba");
           let fixed_length = offset <= 4 && offset + length >= 5 ? length - 1 : length;
           let fixed_offset = offset >= 5 ? offset - 1 : offset;
-          if ((fixed_offset) >= fixedStr.length) {
+          if (fixed_offset >= fixedStr.length) {
             fixed_length = 0;
           }
           while ((fixed_offset + fixed_length) > fixedStr.length) {

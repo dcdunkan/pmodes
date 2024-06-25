@@ -89,32 +89,35 @@ export class MessageEntity {
     this.type = type;
     this.offset = offset;
     this.length = length;
-    if (type === MessageEntityType.Code && argument != null && argument instanceof Uint8Array) {
-      this.argument = argument;
-    } else if (type === MessageEntityType.TextUrl || type === MessageEntityType.PreCode) {
-      if (!(argument instanceof Uint8Array) || argument.length === 0) {
-        throw new MessageEntityError(
-          `Entity type is ${messageEntityTypeString(type)} but argument is either empty or not Uint8Array`,
-        );
+
+    if (argument != null) {
+      if (type === MessageEntityType.Code && argument != null && argument instanceof Uint8Array) {
+        this.argument = argument;
+      } else if (type === MessageEntityType.TextUrl || type === MessageEntityType.PreCode) {
+        if (!(argument instanceof Uint8Array) || argument.length === 0) {
+          throw new MessageEntityError(
+            `Entity type is ${messageEntityTypeString(type)} but argument is either empty or not Uint8Array`,
+          );
+        }
+        this.argument = argument;
+      } else if (type === MessageEntityType.MentionName) {
+        if (!(argument instanceof UserId) || !argument.isValid()) {
+          throw new MessageEntityError("Entity type is MentionName but argument is either not valid or not UserId");
+        }
+        this.userId = argument;
+      } else if (type === MessageEntityType.MediaTimestamp) {
+        if (typeof argument !== "number") {
+          throw new MessageEntityError("Entity type is MediaTimestamp but argument isn't a number");
+        }
+        this.mediaTimestamp = argument;
+      } else if (type === MessageEntityType.CustomEmoji) {
+        if (!(argument instanceof CustomEmojiId) || !argument.isValid()) {
+          throw new MessageEntityError(
+            "Entity type is CustomEmoji but argument is either not valid or not CustomEmojiId",
+          );
+        }
+        this.customEmojiId = argument;
       }
-      this.argument = argument;
-    } else if (type === MessageEntityType.MentionName) {
-      if (!(argument instanceof UserId) || !argument.isValid()) {
-        throw new MessageEntityError("Entity type is MentionName but argument is either not valid or not UserId");
-      }
-      this.userId = argument;
-    } else if (type === MessageEntityType.MediaTimestamp) {
-      if (typeof argument !== "number") {
-        throw new MessageEntityError("Entity type is MediaTimestamp but argument isn't a number");
-      }
-      this.mediaTimestamp = argument;
-    } else if (type === MessageEntityType.CustomEmoji) {
-      if (!(argument instanceof CustomEmojiId) || !argument.isValid()) {
-        throw new MessageEntityError(
-          "Entity type is CustomEmoji but argument is either not valid or not CustomEmojiId",
-        );
-      }
-      this.customEmojiId = argument;
     }
   }
 
