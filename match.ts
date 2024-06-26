@@ -2497,10 +2497,10 @@ export function splitEntities(
   checkIsSorted(entities);
   checkIsSorted(otherEntities);
 
-  const beginPos = new Array<number>(SPLITTABLE_ENTITY_TYPE_COUNT);
-  const endPos = new Array<number>(SPLITTABLE_ENTITY_TYPE_COUNT);
+  const beginPos = new Array<number>(SPLITTABLE_ENTITY_TYPE_COUNT).fill(0);
+  const endPos = new Array<number>(SPLITTABLE_ENTITY_TYPE_COUNT).fill(0);
   let it = 0;
-  let result: MessageEntity[] = [];
+  const result: MessageEntity[] = [];
   function addEntities(endOffset: number) {
     function flushEntities(offset: number) {
       for (
@@ -2526,7 +2526,7 @@ export function splitEntities(
       }
     }
 
-    while (it !== entities.length) {
+    while (it < entities.length) {
       if (entities[it].offset >= endOffset) {
         break;
       }
@@ -2549,13 +2549,13 @@ export function splitEntities(
   const nestedEntitiesStack: MessageEntity[] = [];
   function addOffset(offset: number) {
     while (
-      nestedEntitiesStack.length !== 0 &&
+      nestedEntitiesStack.length > 0 &&
       offset >= nestedEntitiesStack.at(-1)!.offset + nestedEntitiesStack.at(-1)!.length
     ) {
       const oldSize = result.length;
       addEntities(nestedEntitiesStack.at(-1)!.offset + nestedEntitiesStack.at(-1)!.length);
       if (isPreEntity(nestedEntitiesStack.at(-1)!.type)) {
-        result = result.slice(0, oldSize);
+        result.length = oldSize;
       }
       nestedEntitiesStack.pop();
     }
@@ -2581,7 +2581,7 @@ export function resplitEntities(
       return splittableEntities;
     }
 
-    entities = entities.concat(entities, splittableEntities);
+    entities = entities.concat(splittableEntities);
     sortEntities(entities);
   }
   return entities;
