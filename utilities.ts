@@ -203,10 +203,10 @@ export function replaceOffendingCharacters(str: Uint8Array): Uint8Array {
   return s;
 }
 
-export function cleanInputString(str: Uint8Array): boolean {
+export function cleanInputString(str: Uint8Array): { str: Uint8Array; done: boolean } {
   const LENGTH_LIMIT = 35000;
   if (!checkUtf8(str)) {
-    return false;
+    return { str, done: false };
   }
 
   const strSize = str.length;
@@ -226,11 +226,9 @@ export function cleanInputString(str: Uint8Array): boolean {
       case 8:
       case 9:
       // allow '\n'
-      /* falls through */
       case 11:
       case 12:
       // ignore '\r'
-      /* falls through */
       case 14:
       case 15:
       case 16:
@@ -285,7 +283,7 @@ export function cleanInputString(str: Uint8Array): boolean {
   str = str.subarray(0, newSize);
   str = replaceOffendingCharacters(str);
 
-  return true;
+  return { str, done: true };
 }
 
 export function trim(str: Uint8Array) {
@@ -382,5 +380,5 @@ export function stripEmptyCharacters(
 }
 
 export function isEmptyString(str: Uint8Array) {
-  return stripEmptyCharacters(str, str.length).length === 0;
+  return stripEmptyCharacters(new Uint8Array(str), str.length).length === 0;
 }

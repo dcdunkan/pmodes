@@ -2665,7 +2665,9 @@ export function fixFormattedText(
   let result: Uint8Array;
   if (entities.length === 0) {
     // fast path
-    if (!cleanInputString(text)) {
+    const { str, ...cleaning } = cleanInputString(text);
+    text = str;
+    if (!cleaning.done) {
       throw new Error("Strings must be encoded in UTF-8");
     }
     result = text;
