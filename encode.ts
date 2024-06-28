@@ -12,25 +12,25 @@ export const CODEPOINTS = {
 };
 
 export function encode(data: string): Uint8Array {
-  return ENCODER.encode(data);
+    return ENCODER.encode(data);
 }
 
 export function decode(data: number | Uint8Array): string {
-  return DECODER.decode(typeof data === "number" ? Uint8Array.of(data) : data);
+    return DECODER.decode(typeof data === "number" ? Uint8Array.of(data) : data);
 }
 
 export function areTypedArraysEqual(a: Uint8Array, b: string | Uint8Array): boolean {
-  b = typeof b === "string" ? encode(b) : b;
-  return a.byteLength === b.byteLength && !a.some((val, i) => val !== b[i]);
+    b = typeof b === "string" ? encode(b) : b;
+    return a.byteLength === b.byteLength && !a.some((val, i) => val !== b[i]);
 }
 
 export function mergeTypedArrays(...parts: Uint8Array[]): Uint8Array {
-  const resultSize = parts.reduce((p, c) => p + c.length, 0);
-  const result = new Uint8Array(resultSize);
-  let offset = 0;
-  for (const part of parts) {
-    result.set(part, offset);
-    offset += part.length;
-  }
-  return result;
+    const resultSize = parts.reduce((p, c) => p + c.length, 0);
+    const result = new Uint8Array(resultSize);
+    let offset = 0;
+    for (const part of parts) {
+        result.set(part, offset);
+        offset += part.length;
+    }
+    return result;
 }

@@ -1,9 +1,9 @@
 export enum UnicodeSimpleCategory {
-  Unknown,
-  Letter,
-  DecimalNumber,
-  Number,
-  Separator,
+    Unknown,
+    Letter,
+    DecimalNumber,
+    Number,
+    Separator,
 }
 
 // list of [(range_begin << 5) + range_type]
@@ -201,12 +201,11 @@ const unicodeSimpleCategoryJumpPos = new Uint16Array([
     1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566, 1566
 ]);
 
-const unicodeSimpleCategoryTable =
-  "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" +
-  "\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x02\x02\x02\x02\x02\x02\x02" +
-  "\x02\x02\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" +
-  "\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" +
-  "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00";
+const unicodeSimpleCategoryTable = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" +
+    "\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x02\x02\x02\x02\x02\x02\x02" +
+    "\x02\x02\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" +
+    "\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" +
+    "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00";
 
 const TABLE_SIZE = 1280;
 
@@ -314,55 +313,55 @@ const toLowerRanges = new Int32Array([
 ]);
 
 export function getUnicodeSimpleCategory(code: number): UnicodeSimpleCategory {
-  if (code < 128) return unicodeSimpleCategoryTable[code].codePointAt(0)!;
-  const jumpPosIndex = code <= 0x20000 ? code >> 7 : (0x20000 >> 7) - (0x20000 >> 16) + (code >> 16);
-  let it = unicodeSimpleCategoryJumpPos[jumpPosIndex];
-  code = (code << 5) + 30;
-  while (unicodeSimpleCategoryRanges[it] <= code) ++it;
-  return (unicodeSimpleCategoryRanges[it - 1] & 31);
+    if (code < 128) return unicodeSimpleCategoryTable[code].codePointAt(0)!;
+    const jumpPosIndex = code <= 0x20000 ? code >> 7 : (0x20000 >> 7) - (0x20000 >> 16) + (code >> 16);
+    let it = unicodeSimpleCategoryJumpPos[jumpPosIndex];
+    code = (code << 5) + 30;
+    while (unicodeSimpleCategoryRanges[it] <= code) ++it;
+    return (unicodeSimpleCategoryRanges[it - 1] & 31);
 }
 
 export function binarySearchRanges(ranges: Int32Array, code: number) {
-  if (code > 0x10ffff) {
-    return 0;
-  }
-
-  const codeInt = code;
-  let l = 0;
-  let r = ranges.length;
-  while (l < r) {
-    const m = ((l + r + 2) >> 2) << 1;
-    if (ranges[m] <= codeInt) {
-      l = m;
-    } else {
-      r = m - 2;
+    if (code > 0x10ffff) {
+        return 0;
     }
-  }
 
-  const t = ranges[l + 1];
-  if (t < 0) {
-    return code - ranges[l] + (~t);
-  }
-  if (t <= 0x10ffff) {
-    return t;
-  }
-  switch (t - 0x200000) {
-    case 0:
-      return (code & -2);
-    case 1:
-      return (code | 1);
-    case 2:
-      return ((code - 1) | 1);
-    default:
-      console.error(code, l, r, t);
-      return 0;
-  }
+    const codeInt = code;
+    let l = 0;
+    let r = ranges.length;
+    while (l < r) {
+        const m = ((l + r + 2) >> 2) << 1;
+        if (ranges[m] <= codeInt) {
+            l = m;
+        } else {
+            r = m - 2;
+        }
+    }
+
+    const t = ranges[l + 1];
+    if (t < 0) {
+        return code - ranges[l] + (~t);
+    }
+    if (t <= 0x10ffff) {
+        return t;
+    }
+    switch (t - 0x200000) {
+        case 0:
+            return (code & -2);
+        case 1:
+            return (code | 1);
+        case 2:
+            return ((code - 1) | 1);
+        default:
+            console.error(code, l, r, t);
+            return 0;
+    }
 }
 
 export function unicodeToLower(code: number) {
-  if (code < TABLE_SIZE) {
-    return toLowerTable[code];
-  } else {
-    return binarySearchRanges(toLowerRanges, code);
-  }
+    if (code < TABLE_SIZE) {
+        return toLowerTable[code];
+    } else {
+        return binarySearchRanges(toLowerRanges, code);
+    }
 }

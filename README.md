@@ -6,13 +6,12 @@
 
 </div>
 
-A **work-in-progress** TypeScript implementation of [TDLib](https://github.com/tdlib/td)'s functions and utilities
-related to parsing text with several parse modes and matching text entities.
+A **work-in-progress** TypeScript implementation of [TDLib](https://github.com/tdlib/td)'s functions and utilities related to parsing text with several parse
+modes and matching text entities.
 
-Few more methods are left to be implemented. But the tests are direclty ported from TDLib source without a change. And
-they seem to be passing. So, I'll take that as a "it works"! I cannot assure you the quality of the implementation, as
-I'm **not** good at C++ (TDLib is written in C++). So, I probably have done few stupid things because I missed how C++
-actually works.
+Few more methods are left to be implemented. But the tests are direclty ported from TDLib source without a change. And they seem to be passing. So, I'll take
+that as a "it works"! I cannot assure you the quality of the implementation, as I'm **not** good at C++ (TDLib is written in C++). So, I probably have done few
+stupid things because I missed how C++ actually works.
 
 <details>
   <summary>Anyway, thank you.</summary>
