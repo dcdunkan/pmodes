@@ -789,7 +789,6 @@ export function isEmailAddress(str: Uint8Array): boolean {
   return true;
 }
 
-// deno-fmt-ignore
 export function isCommonTLD(str: Uint8Array): boolean {
   let isLower = true;
   for (const c of str) {

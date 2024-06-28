@@ -1,4 +1,4 @@
-export const ENCODER = new TextEncoder(), DECODER = new TextDecoder();
+const ENCODER = new TextEncoder(), DECODER = new TextDecoder();
 
 // deno-fmt-ignore
 export const CODEPOINTS = {
@@ -8,7 +8,7 @@ export const CODEPOINTS = {
   "n": 110, "t": 116, "z": 122, "?": 63, "[": 91, "]": 93, "{": 123, "}": 125,
   "(": 40, ")": 41, "`": 96, "'": 39, "~": 126, "T": 84, "2": 50, "3": 51, "5": 53,
   "6": 54, "\\": 92, "*": 42, "&": 38, "=": 61, "f": 102, "!": 33, ";": 59, "%": 37,
-  "|": 124, "x": 120, 
+  "|": 124, "x": 120, e: 101 
 };
 
 export function encode(data: string): Uint8Array {
