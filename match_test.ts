@@ -1,5 +1,5 @@
 import { CustomEmojiId } from "./custom_emoji_id.ts";
-import { assert, assertEquals, assertStrictEquals } from "./deps_test.ts";
+import { assert, assertEquals, assertStrictEquals, hexStringToBytes } from "./deps_test.ts";
 import { CODEPOINTS, decode, encode, mergeTypedArrays } from "./encode.ts";
 import {
   findBankCardNumbers,
@@ -1486,10 +1486,6 @@ Deno.test("fix formatted text", { ignore: false }, async (t) => {
     [],
   );
 });
-
-function hexStringToBytes(str: string): Uint8Array {
-  return Uint8Array.from(Array.from(str, (char) => char.charCodeAt(0)));
-}
 
 Deno.test("parse html", async (t) => {
   let count = 0;
