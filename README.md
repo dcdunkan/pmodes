@@ -17,7 +17,7 @@ actually works.
 <details>
   <summary>Anyway, thank you.</summary>
 
-#### Here is what we currently have here. <sup>I'm just showing off!</sup>
+#### Here is what we currently have here.
 
 But of course, they still might have a few bugs. If you ever encounter one please consider opening an issue.
 
@@ -81,6 +81,27 @@ But of course, they still might have a few bugs. If you ever encounter one pleas
 - parse_markdown_v2
 - decode_html_entity
 - parse_html
+- get_formatted_text_object
+- find_text_url_entities_v3
+- clean_input_string_with_entities
+- remove_invalid_entities
+- split_entities
+- resplit_entities
+- merge_new_entities
+- fix_entities
+- fix_formatted_text
+- get_type_priority
+- MessageEntity
+- TextEntityObject
+- get_text_entities_object
+- message_entity_type_string
+- MessageEntityType
+
+###### random.ts (td/utils/Random.{h,cpp})
+
+- fast_uint32
+- fast_bool
+- fast(int, int)
 
 ###### utilities.ts (from a lot of source files)
 
@@ -104,6 +125,14 @@ But of course, they still might have a few bugs. If you ever encounter one pleas
 - is_hashtag_letter
 - CHECK
 - LOG_CHECK
+- to_integer
+- get_to_integer_safe_error
+- to_integer_safe
+- replace_offending_characters
+- clean_input_string
+- trim
+- strip_empty_characters
+- is_empty_string
 
 ###### unicode.ts (tdutils/td/utils/unicode.cpp)
 
