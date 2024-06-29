@@ -1,34 +1,8 @@
 import { CustomEmojiId } from "./custom_emoji_id.ts";
 import { areTypedArraysEqual } from "./encode.ts";
+import { FormattedText } from "./match.ts";
 import { UserId } from "./user_id.ts";
 import { UNREACHABLE } from "./utilities.ts";
-
-export function getTypePriority(type: MessageEntityType): number {
-    const priorities = [
-        50, /* Mention */
-        50, /* Hashtag */
-        50, /* BotCommand */
-        50, /* Url */
-        50, /* EmailAddress */
-        90, /* Bold */
-        91, /* Italic */
-        20, /* Code */
-        11, /* Pre */
-        10, /* PreCode */
-        49, /* TextUrl */
-        49, /* MentionName */
-        50, /* Cashtag */
-        50, /* PhoneNumber */
-        92, /* Underline */
-        93, /* Strikethrough */
-        0, /* Blockquote */
-        50, /* BankCardNumber */
-        50, /* MediaTimestamp */
-        94, /* Spoiler */
-        99, /* CustomEmoji */
-    ];
-    return priorities[type];
-}
 
 export enum MessageEntityType {
     Mention,
@@ -91,7 +65,7 @@ export class MessageEntity {
         this.length = length;
 
         if (argument != null) {
-            if (type === MessageEntityType.Code && argument != null && argument instanceof Uint8Array) {
+            if (type === MessageEntityType.Code && argument instanceof Uint8Array) {
                 this.argument = argument;
             } else if (type === MessageEntityType.TextUrl || type === MessageEntityType.PreCode) {
                 if (!(argument instanceof Uint8Array) || argument.length === 0) {
@@ -126,25 +100,61 @@ export class MessageEntity {
         offset: number,
         length: number,
         argument?: Uint8Array | UserId | number | CustomEmojiId,
-    ) {
+    ): MessageEntity {
         return new MessageEntity(type, offset, length, argument);
     }
 
-    equal(other: MessageEntity) {
+    static getTypePriority(type: MessageEntityType): number {
+        const priorities = [
+            50, /* Mention */
+            50, /* Hashtag */
+            50, /* BotCommand */
+            50, /* Url */
+            50, /* EmailAddress */
+            90, /* Bold */
+            91, /* Italic */
+            20, /* Code */
+            11, /* Pre */
+            10, /* PreCode */
+            49, /* TextUrl */
+            49, /* MentionName */
+            50, /* Cashtag */
+            50, /* PhoneNumber */
+            92, /* Underline */
+            93, /* Strikethrough */
+            0, /* Blockquote */
+            50, /* BankCardNumber */
+            50, /* MediaTimestamp */
+            94, /* Spoiler */
+            99, /* CustomEmoji */
+        ];
+        return priorities[type];
+    }
+
+    clone(): MessageEntity {
+        const entity = new MessageEntity(this.type, this.offset, this.length);
+        entity.argument = Uint8Array.from(this.argument);
+        entity.userId = new UserId(this.userId.get());
+        entity.mediaTimestamp = Number(this.mediaTimestamp);
+        entity.customEmojiId = new CustomEmojiId(this.customEmojiId.get());
+        return entity;
+    }
+
+    equal(other: MessageEntity): boolean {
         return this.offset === other.offset && this.length === other.length && this.type === other.type &&
             this.mediaTimestamp === other.mediaTimestamp && areTypedArraysEqual(this.argument, other.argument) &&
             this.userId.id === other.userId.id && this.customEmojiId.id === other.customEmojiId.id;
     }
 
-    isBefore(other: MessageEntity) {
+    isBefore(other: MessageEntity): boolean {
         if (this.offset !== other.offset) {
             return this.offset < other.offset;
         }
         if (this.length !== other.length) {
             return this.length < other.length;
         }
-        const priority = getTypePriority(this.type);
-        const otherPriority = getTypePriority(other.type);
+        const priority = MessageEntity.getTypePriority(this.type);
+        const otherPriority = MessageEntity.getTypePriority(other.type);
         return priority < otherPriority;
     }
 
@@ -266,6 +276,18 @@ export function getTextEntitiesObject(
         }
     }
     return result;
+}
+
+export type ApiFormattedText = {
+    text: Uint8Array;
+    entities: TextEntityObject[];
+};
+
+export function getFormattedTextObject(text: FormattedText, skipBotCommands: boolean, maxMediaTimestamp: number): ApiFormattedText {
+    return {
+        text: text.text,
+        entities: getTextEntitiesObject(text.entities, skipBotCommands, maxMediaTimestamp),
+    };
 }
 
 export function messageEntityTypeString(messageEntityType: MessageEntityType) {

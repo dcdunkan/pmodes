@@ -1,7 +1,8 @@
 import { CustomEmojiId } from "./custom_emoji_id.ts";
-import { areTypedArraysEqual, CODEPOINTS, encode, mergeTypedArrays } from "./encode.ts";
+import { areTypedArraysEqual, CODEPOINTS, decode, encode, mergeTypedArrays } from "./encode.ts";
 import { HttpUrlProtocol, parseURL } from "./http_url.ts";
 import { UserId } from "./user_id.ts";
+import { checkUtf8 } from "./utf8.ts";
 import { beginsWith, CHECK, fullSplit, isAlphaOrDigit, split, toInteger, toLower, tolowerBeginsWith } from "./utilities.ts";
 
 export class LinkManager {
@@ -88,6 +89,18 @@ export class LinkManager {
         }
 
         throw new Error("Custom emoji URL must have an emoji identifier");
+    }
+
+    static checkLink(link: Uint8Array, httpOnly: boolean, httpsOnly: boolean) {
+        try {
+            return this.checkLinkImpl(link, httpOnly, httpsOnly);
+        } catch (error) {
+            if (checkUtf8(link)) {
+                throw new Error(`URL '${decode(link)}' is invalid: ${error.message}`);
+            } else {
+                throw new Error(`URL is invalid: ${error.message}`);
+            }
+        }
     }
 
     static getCheckedLink(link: Uint8Array, httpOnly = false, httpsOnly = false): Uint8Array {

@@ -42,7 +42,7 @@ import {
 import { getUnicodeSimpleCategory, UnicodeSimpleCategory } from "./unicode.ts";
 import { areTypedArraysEqual, CODEPOINTS, decode, encode } from "./encode.ts";
 import { BAD_PATH_END_CHARACTERS, COMMON_TLDS, NUMERIC_LIMITS } from "./constants.ts";
-import { getTextEntitiesObject, getTypePriority, MessageEntity, MessageEntityType, messageEntityTypeString, TextEntityObject } from "./message_entity.ts";
+import { getTextEntitiesObject, MessageEntity, MessageEntityType, messageEntityTypeString, TextEntityObject } from "./message_entity.ts";
 
 export type Position = [number, number];
 
@@ -1051,8 +1051,8 @@ export function sortEntities(entities: MessageEntity[]): MessageEntity[] {
         if (length !== other.length) {
             return length > other.length ? -1 : 1;
         }
-        const priority = getTypePriority(type);
-        const otherPriority = getTypePriority(other.type);
+        const priority = MessageEntity.getTypePriority(type);
+        const otherPriority = MessageEntity.getTypePriority(other.type);
         return priority < otherPriority ? -1 : 1;
     });
 }
@@ -1864,8 +1864,11 @@ export function parseMarkdownV2(text: Uint8Array): FormattedText {
     return { text: text.slice(0, resultSize), entities };
 }
 
-export function findTextUrlEntitiesV3(text: Uint8Array): Uint8Array[] {
-    const result: Uint8Array[] = [];
+// NOTE: (pmodes) modified a little bit to return the slice positions (start and end)
+// instead of the actual slices because that's how it is used internally:
+
+export function findTextUrlEntitiesV3(text: Uint8Array): [number, number][] {
+    const result: [number, number][] = [];
     const size = text.length;
     for (let i = 0; i < size; i++) {
         if (text[i] !== CODEPOINTS["["]) {
@@ -1899,10 +1902,667 @@ export function findTextUrlEntitiesV3(text: Uint8Array): Uint8Array[] {
         if (urlEnd < size) {
             const url = text.subarray(urlBegin + 1, urlEnd);
             if (LinkManager.getCheckedLink(url).length !== 0) {
-                result.push(text.subarray(textBegin, textEnd + 1));
-                result.push(text.subarray(urlBegin, urlEnd + 1));
+                result.push([textBegin, textEnd + 1]);
+                result.push([urlBegin, urlEnd + 1]);
             }
         }
+    }
+    return result;
+}
+
+export function parseTextUrlEntitiesV3(text: Uint8Array, entities: MessageEntity[]) {
+    const debug_initial_text = Uint8Array.from(text);
+    const resultText: number[] = [];
+    const result: FormattedText = {
+        text: new Uint8Array(),
+        entities: [],
+    };
+    let resultTextUtf16Length = 0;
+    const partEntities: MessageEntity[] = [];
+    const partSplittableEntities: MessageEntity[][] = new Array(SPLITTABLE_ENTITY_TYPE_COUNT);
+    let partBegin = 0;
+    let maxEnd = 0;
+    let skippedLength = 0;
+
+    function addPart(partEnd: number) {
+        if (maxEnd != partBegin) {
+            const keptPartText = utf8utf16Substr(text, 0, maxEnd - partBegin);
+            text = text.slice(keptPartText.length);
+            resultText.push(...keptPartText);
+            result.entities = result.entities.concat(partEntities);
+            partEntities.length = 0;
+            resultTextUtf16Length += maxEnd - partBegin;
+        }
+
+        const splittableEntityPos: number[] = new Array(SPLITTABLE_ENTITY_TYPE_COUNT);
+        for (const splittableEntities of partSplittableEntities) {
+            checkNonIntersecting(splittableEntities);
+        }
+        if (partEnd != maxEnd) {
+            const parsedPartText = utf8utf16Substr(text, 0, partEnd - maxEnd);
+            text = text.slice(parsedPartText.length);
+            const textUrls = findTextUrlEntitiesV3(parsedPartText);
+
+            let textUtf16Offset = maxEnd;
+            let prevPos = 0;
+            for (let i = 0; i < textUrls.length; i += 2) {
+                const textBeginPos = textUrls[i][0];
+                const textEndPos = textUrls[i][1];
+                const urlBeginPos = textUrls[i + 1][0];
+                const urlEndPos = textUrls[i + 1][1];
+                CHECK(decode(parsedPartText[textBeginPos]) === "[");
+                CHECK(decode(parsedPartText[textEndPos]) === "]");
+                CHECK(urlBeginPos === textEndPos + 1);
+                CHECK(decode(parsedPartText[urlBeginPos]) === "(");
+                CHECK(decode(parsedPartText[urlEndPos]) === ")");
+
+                const beforeTextUrl = parsedPartText.slice(prevPos, textBeginPos);
+                const beforeTextUrlUtf16Length = textLength(beforeTextUrl);
+                resultTextUtf16Length += beforeTextUrlUtf16Length;
+                resultText.push(...beforeTextUrl);
+                textUtf16Offset += beforeTextUrlUtf16Length;
+
+                const textUrl = parsedPartText.slice(textBeginPos + 1, textEndPos);
+                const textUrlUtf16Length = textLength(textUrl);
+                const url = parsedPartText.slice(urlBeginPos + 1, urlEndPos);
+                const urlUtf16Length = textLength(url);
+                result.entities.push(MessageEntity.of(MessageEntityType.TextUrl, resultTextUtf16Length, textUrlUtf16Length, LinkManager.getCheckedLink(url)));
+                resultText.push(...textUrl);
+                resultTextUtf16Length += textUrlUtf16Length;
+
+                const initialUtf16Length = 1 + textUrlUtf16Length + 1 + 1 + urlUtf16Length + 1;
+
+                for (let index = 0; index < SPLITTABLE_ENTITY_TYPE_COUNT; index++) {
+                    let pos = splittableEntityPos[index];
+                    const splittableEntities = partSplittableEntities[index];
+                    while (pos < splittableEntities.length && splittableEntities[pos].offset < textUtf16Offset + initialUtf16Length) {
+                        let offset = splittableEntities[pos].offset;
+                        let length = splittableEntities[pos].length;
+                        if (offset + length > textUtf16Offset + 1 + textUrlUtf16Length) {
+                            length = textUtf16Offset + 1 + textUrlUtf16Length - offset;
+                        }
+                        if (offset >= textUtf16Offset + 1) {
+                            offset--;
+                        } else if (offset + length >= textUtf16Offset + 1) {
+                            length--;
+                        }
+                        if (length > 0) {
+                            CHECK(offset >= skippedLength);
+                            CHECK(offset - skippedLength + length <= resultTextUtf16Length);
+                            if (offset < textUtf16Offset && offset + length > textUtf16Offset) {
+                                result.entities.push(MessageEntity.of(splittableEntities[pos].type, offset - skippedLength, textUtf16Offset - offset));
+                                length -= textUtf16Offset - offset;
+                                offset = textUtf16Offset;
+                            }
+                            result.entities.push(MessageEntity.of(splittableEntities[pos].type, offset - skippedLength, length));
+                        }
+                        if (splittableEntities[pos].offset + splittableEntities[pos].length > textUtf16Offset + initialUtf16Length) {
+                            splittableEntities[pos].length = splittableEntities[pos].offset + splittableEntities[pos].length -
+                                (textUtf16Offset + initialUtf16Length);
+                            splittableEntities[pos].offset = textUtf16Offset + initialUtf16Length;
+                        } else {
+                            pos++;
+                        }
+                    }
+                }
+                textUtf16Offset += initialUtf16Length;
+
+                skippedLength += 2 + 2 + urlUtf16Length;
+                prevPos = urlEndPos + 1;
+            }
+            resultText.push(...parsedPartText.slice(prevPos));
+            resultTextUtf16Length += partEnd - textUtf16Offset;
+        }
+
+        for (let index = 0; index < SPLITTABLE_ENTITY_TYPE_COUNT; index++) {
+            let pos = splittableEntityPos[index];
+            const splittableEntities = partSplittableEntities[index];
+            while (pos < splittableEntities.length && splittableEntities[pos].offset < partEnd) {
+                if (splittableEntities[pos].offset + splittableEntities[pos].length > partEnd) {
+                    result.entities.push(
+                        MessageEntity.of(
+                            splittableEntities[pos].type,
+                            splittableEntities[pos].offset - skippedLength,
+                            partEnd - splittableEntities[pos].offset,
+                        ),
+                    );
+                    splittableEntities[pos].length = splittableEntities[pos].offset + splittableEntities[pos].length - partEnd;
+                    splittableEntities[pos].offset = partEnd;
+                } else {
+                    result.entities.push(
+                        MessageEntity.of(splittableEntities[pos].type, splittableEntities[pos].offset - skippedLength, splittableEntities[pos].length),
+                    );
+                    pos++;
+                }
+            }
+            if (pos === splittableEntities.length) {
+                splittableEntities.length = 0;
+            } else {
+                CHECK(pos === splittableEntities.length - 1);
+                LOG_CHECK(text.length !== 0, `"${debug_initial_text}" ${JSON.stringify(entities)}`);
+                splittableEntities[0] = splittableEntities.at(-1)!;
+                splittableEntities.length = 0;
+            }
+        }
+
+        partBegin = partEnd;
+    }
+
+    for (const entity of entities) {
+        if (isSplittableEntity(entity.type)) {
+            const index = getSplittableEntityTypeIndex(entity.type);
+            partSplittableEntities[index].push(entity);
+            continue;
+        }
+        CHECK(isContinuousEntity(entity.type));
+
+        if (entity.offset > maxEnd) {
+            addPart(entity.offset);
+        } else {
+            CHECK(entity.offset === maxEnd);
+        }
+
+        maxEnd = entity.offset + entity.length;
+        partEntities.push(entity);
+        partEntities.at(-1)!.offset -= skippedLength;
+    }
+    addPart(partBegin + textLength(text));
+
+    result.text = Uint8Array.from(resultText);
+    return result;
+}
+
+export function findSplittableEntitiesV3(text: Uint8Array, entities: MessageEntity[]) {
+    const unallowedBoundaries: Set<number> = new Set();
+    for (const entity of entities) {
+        unallowedBoundaries.add(entity.offset);
+        unallowedBoundaries.add(entity.offset + entity.length);
+        if (
+            entity.type === MessageEntityType.Mention || entity.type === MessageEntityType.Hashtag ||
+            entity.type === MessageEntityType.BotCommand || entity.type === MessageEntityType.Cashtag ||
+            entity.type === MessageEntityType.PhoneNumber || entity.type === MessageEntityType.BankCardNumber
+        ) {
+            for (let i = 1; i < entity.length; i++) {
+                unallowedBoundaries.add(entity.offset + i);
+            }
+        }
+    }
+
+    const foundEntities = findEntities(text, false, false)
+        .filter((entity) => entity.type !== MessageEntityType.EmailAddress && entity.type === MessageEntityType.Url);
+    for (const entity of foundEntities) {
+        for (let i = 0; i <= entity.length; i++) {
+            unallowedBoundaries.add(entity.offset + 1);
+        }
+    }
+
+    const result: MessageEntity[] = [];
+    const splittableEntityOffset: number[] = new Array(SPLITTABLE_ENTITY_TYPE_COUNT);
+    let utf16Offset = 0;
+    for (let i = 0; i + 1 < text.length; i++) {
+        const c = text[i];
+        if (isUtf8CharacterFirstCodeUnit(c)) {
+            utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
+        }
+        if (
+            (c === CODEPOINTS["_"] || c === CODEPOINTS["*"] || c === CODEPOINTS["~"] || c === CODEPOINTS["|"]) && text[i] === text[i + 1] &&
+            !unallowedBoundaries.has(utf16Offset)
+        ) {
+            let j = i + 2;
+            while (j !== text.length && text[j] === text[i] && !unallowedBoundaries.has(utf16Offset + (j - i - 1))) {
+                j++;
+            }
+            if (j === i + 2) {
+                const type = (() => {
+                    switch (c) {
+                        case CODEPOINTS["_"]:
+                            return MessageEntityType.Italic;
+                        case CODEPOINTS["*"]:
+                            return MessageEntityType.Bold;
+                        case CODEPOINTS["~"]:
+                            return MessageEntityType.Strikethrough;
+                        case CODEPOINTS["|"]:
+                            return MessageEntityType.Spoiler;
+                        default:
+                            UNREACHABLE();
+                            // return MessageEntityType.Size;
+                    }
+                })();
+                const index = getSplittableEntityTypeIndex(type);
+                if (splittableEntityOffset[index] !== 0) {
+                    const length = utf16Offset - splittableEntityOffset[index] - 1;
+                    if (length > 0) {
+                        result.push(MessageEntity.of(type, splittableEntityOffset[index], length));
+                    }
+                    splittableEntityOffset[index] = 0;
+                } else {
+                    splittableEntityOffset[index] = utf16Offset + 1;
+                }
+            }
+            utf16Offset += j - i - 1;
+            i = j - 1;
+        }
+    }
+    return result;
+}
+
+export function parseMarkdownV3WithoutPre(text: Uint8Array, entities: MessageEntity[]): FormattedText {
+    checkIsSorted(entities);
+
+    let parsedTextUrlText: FormattedText = {
+        text: new Uint8Array(),
+        entities: [],
+    };
+    if (text.indexOf(CODEPOINTS["["]) !== -1) {
+        parsedTextUrlText = parseTextUrlEntitiesV3(text, entities);
+        text = parsedTextUrlText.text;
+        entities = parsedTextUrlText.entities;
+    }
+
+    let haveSplittableEntities = false;
+    for (let i = 0; i + 1 < text.length; i++) {
+        if (
+            (text[i] === CODEPOINTS["_"] || text[i] === CODEPOINTS["*"] || text[i] === CODEPOINTS["~"] || text[i] === CODEPOINTS["|"]) &&
+            text[i] === text[i + 1]
+        ) {
+            haveSplittableEntities = true;
+            break;
+        }
+    }
+    if (!haveSplittableEntities) {
+        entities = sortEntities(entities);
+        return { text, entities };
+    }
+
+    const foundSplittableEntities = findSplittableEntitiesV3(text, entities);
+    const removedPos: number[] = [];
+    for (const entity of foundSplittableEntities) {
+        removedPos.push(entity.offset - 1);
+        removedPos.push(entity.offset + entity.length + 1);
+    }
+    removedPos.sort((a, b) => a - b);
+
+    CHECK(text.length >= 2 * removedPos.length);
+    const newText: number[] = [];
+    let j = 0;
+    let utf16Offset = 0;
+
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (isUtf8CharacterFirstCodeUnit(c)) {
+            utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
+        }
+        if (j < removedPos.length && utf16Offset === removedPos[j]) {
+            i++;
+            utf16Offset++;
+            CHECK(j + 1 === removedPos.length || removedPos[j + 1] >= removedPos[j] + 2);
+            j++;
+        } else {
+            newText.push(text[i]);
+        }
+    }
+    CHECK(j === removedPos.length);
+    entities = entities.concat(foundSplittableEntities);
+    for (const entity of entities) {
+        const removedBeforeBegin = upperBound(removedPos, entity.offset);
+        const removedBeforeEnd = upperBound(removedPos, entity.offset + entity.length);
+        entity.length -= 2 * (removedBeforeEnd - removedBeforeBegin);
+        entity.offset -= 2 * removedBeforeBegin;
+        CHECK(entity.offset >= 0);
+        CHECK(entity.length >= 0);
+        CHECK(entity.offset + entity.length <= utf16Offset);
+    }
+
+    entities = removeEmptyEntities(entities);
+    entities = sortEntities(entities);
+    return {
+        text: Uint8Array.from(newText),
+        entities: entities,
+    };
+}
+
+function upperBound<T>(arr: T[], search: T): number {
+    const index = arr.findIndex((x) => x > search);
+    return index === -1 ? arr.length : index;
+}
+
+export function parsePreEntitiesV3(text: Uint8Array, entities?: MessageEntity[]): FormattedText {
+    if (entities == null) {
+        const result: number[] = [];
+        const entities: MessageEntity[] = [];
+        const size = text.length;
+        let utf16Offset = 0;
+
+        for (let i = 0; i < size; i++) {
+            const c = text[i];
+            if (c !== CODEPOINTS["`"]) {
+                if (isUtf8CharacterFirstCodeUnit(c)) {
+                    utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
+                }
+                result.push(text[i]);
+                continue;
+            }
+
+            let j = i + 1;
+            while (j < size && text[j] === CODEPOINTS["`"]) {
+                j++;
+            }
+
+            if (j - i === 1 || j - i === 3) {
+                let entityLength = 0;
+                let isFound = false;
+                for (let endTagBegin = j; endTagBegin < size; endTagBegin++) {
+                    const curC = text[endTagBegin];
+                    if (curC === CODEPOINTS["`"]) {
+                        let endTagEnd = endTagBegin + 1;
+                        while (endTagEnd < size && text[endTagEnd] === CODEPOINTS["`"]) {
+                            endTagEnd++;
+                        }
+                        if (endTagEnd - endTagBegin === j - i) {
+                            CHECK(entityLength > 0);
+                            entities.push(MessageEntity.of(j - i === 3 ? MessageEntityType.Pre : MessageEntityType.Code, utf16Offset, entityLength));
+                            result.push(...text.slice(j, endTagBegin));
+                            utf16Offset += entityLength;
+                            i = endTagEnd - 1;
+                            isFound = true;
+                            break;
+                        } else {
+                            entityLength += endTagEnd - endTagBegin;
+                            endTagBegin = endTagEnd - 1;
+                        }
+                    } else if (isUtf8CharacterFirstCodeUnit(curC)) {
+                        entityLength += 1 + (curC >= 0xf0 ? 1 : 0);
+                    }
+                }
+                if (isFound) {
+                    continue;
+                }
+            }
+
+            result.push(...text.slice(i, j));
+            utf16Offset += j - i;
+            i = j - 1;
+        }
+        return {
+            text: Uint8Array.from(result),
+            entities: entities,
+        };
+    } else {
+        const resultText: number[] = [];
+        const result: FormattedText = {
+            text: new Uint8Array(),
+            entities: [],
+        };
+        let resultTextUtf16Length = 0;
+        let partBegin = 0;
+        let maxEnd = 0;
+        let skippedLength = 0;
+
+        // deno-lint-ignore no-inner-declarations
+        function addPart(partEnd: number) {
+            CHECK(partBegin === resultTextUtf16Length + skippedLength);
+            if (maxEnd != partBegin) {
+                const keptPartText = utf8utf16Substr(text, 0, maxEnd - partBegin);
+                text = text.slice(keptPartText.length);
+                resultText.push(...keptPartText);
+                resultTextUtf16Length += maxEnd - partBegin;
+            }
+
+            if (partEnd != maxEnd) {
+                const parsedPartText = utf8utf16Substr(text, 0, partEnd - maxEnd);
+                text = text.slice(parsedPartText.length);
+
+                if (parsedPartText.indexOf(CODEPOINTS["`"]) === -1) {
+                    resultText.push(...parsedPartText);
+                    resultTextUtf16Length += partEnd - maxEnd;
+                } else {
+                    const parsedText = parsePreEntitiesV3(parsedPartText);
+                    let newSkippedLength = 0;
+                    for (const entity of parsedText.entities) {
+                        newSkippedLength += entity.type === MessageEntityType.Pre ? 6 : 2;
+                    }
+                    CHECK(newSkippedLength < partEnd - maxEnd);
+                    resultText.push(...parsedText.text);
+                    for (const entity of parsedText.entities) {
+                        entity.offset += resultTextUtf16Length;
+                    }
+                    result.entities = result.entities.concat(parsedText.entities);
+                    resultTextUtf16Length += partEnd - maxEnd - newSkippedLength;
+                    skippedLength += newSkippedLength;
+                }
+            }
+
+            partBegin = partEnd;
+        }
+
+        for (const entity of entities) {
+            if (entity.offset > maxEnd) {
+                addPart(entity.offset);
+            }
+
+            maxEnd = Math.max(maxEnd, entity.offset + entity.length);
+            result.entities.push(entity);
+            result.entities.at(-1)!.offset -= skippedLength;
+        }
+        addPart(partBegin + textLength(text));
+
+        result.text = Uint8Array.from(resultText);
+
+        return result;
+    }
+}
+
+export function parseMarkdownV3(text: FormattedText): FormattedText {
+    if (text.text.indexOf(CODEPOINTS["`"]) !== -1) {
+        text = parsePreEntitiesV3(text.text, text.entities);
+        checkIsSorted(text.entities);
+    }
+
+    let havePre = false;
+    for (const entity of text.entities) {
+        if (isPreEntity(entity.type)) {
+            havePre = true;
+            break;
+        }
+    }
+    if (!havePre) {
+        return parseMarkdownV3WithoutPre(text.text, text.entities);
+    }
+
+    const resultText: number[] = [];
+    const result: { entities: MessageEntity[] } = {
+        entities: [],
+    };
+    let resultTextUtf16Length = 0;
+    const partEntities: MessageEntity[] = [];
+    let partBegin = 0;
+    let maxEnd = 0;
+    let leftText = text.text;
+
+    function addPart(partEnd: number) {
+        const partText = utf8utf16Substr(leftText, 0, partEnd - partBegin);
+        leftText = leftText.slice(partText.length);
+
+        const part = parseMarkdownV3WithoutPre(partText, partEntities.map((entity) => entity.clone()));
+        partEntities.length = 0;
+
+        resultText.push(...part.text);
+        for (const entity of part.entities) {
+            entity.offset += resultTextUtf16Length;
+        }
+        result.entities = result.entities.concat(part.entities);
+        resultTextUtf16Length += textLength(part.text);
+        partBegin = partEnd;
+    }
+
+    for (let i = 0; i < text.entities.length; i++) {
+        const entity = text.entities[i];
+        CHECK(isSplittableEntity(entity.type) || isPreEntity(entity.type) || isContinuousEntity(entity.type));
+        if (isPreEntity(entity.type)) {
+            CHECK(entity.offset >= maxEnd);
+            CHECK(i + 1 === text.entities.length || text.entities[i + 1].offset >= entity.offset + entity.length);
+
+            addPart(entity.offset);
+
+            const partText = utf8utf16Substr(leftText, 0, entity.length);
+            leftText = leftText.slice(partText.length);
+
+            resultText.push(...partText);
+            result.entities.push(entity);
+            result.entities.at(-1)!.offset = resultTextUtf16Length;
+            resultTextUtf16Length += entity.length;
+            partBegin = entity.offset + entity.length;
+        } else {
+            partEntities.push(entity);
+            partEntities.at(-1)!.offset -= partBegin;
+        }
+
+        maxEnd = Math.max(maxEnd, entity.offset + entity.length);
+    }
+    addPart(partBegin + textLength(leftText));
+
+    return {
+        text: Uint8Array.from(resultText),
+        entities: result.entities,
+    };
+}
+
+// text entities must be valid
+export function getMarkdownV3(text: FormattedText): FormattedText {
+    if (text.entities.length === 0) {
+        return text;
+    }
+
+    checkIsSorted(text.entities);
+    for (const entity of text.entities) {
+        if (!isUserEntity(entity.type)) {
+            return text;
+        }
+    }
+
+    const resultText: number[] = [];
+    const result: FormattedText = {
+        text: new Uint8Array(),
+        entities: [],
+    };
+
+    interface EntityInfo {
+        entity: MessageEntity;
+        utf16AddedBefore: number;
+    }
+    const nestedEntitiesStack: EntityInfo[] = [];
+    let currentEntity = 0;
+
+    let utf16Offset = 0;
+    let utf16Added = 0;
+
+    for (let pos = 0; pos <= text.text.length; pos++) {
+        const c = text.text[pos];
+        if (isUtf8CharacterFirstCodeUnit(c)) {
+            while (nestedEntitiesStack.length > 0) {
+                const entity = nestedEntitiesStack.at(-1)?.entity!;
+                const entityEnd = entity.offset + entity.length;
+                if (utf16Offset < entityEnd) {
+                    break;
+                }
+
+                CHECK(utf16Offset === entityEnd);
+
+                switch (entity.type) {
+                    case MessageEntityType.Italic:
+                        resultText.push(...encode("__"));
+                        utf16Added += 2;
+                        break;
+                    case MessageEntityType.Bold:
+                        resultText.push(...encode("**"));
+                        utf16Added += 2;
+                        break;
+                    case MessageEntityType.Strikethrough:
+                        resultText.push(...encode("~~"));
+                        utf16Added += 2;
+                        break;
+                    case MessageEntityType.Spoiler:
+                        resultText.push(...encode("||"));
+                        utf16Added += 2;
+                        break;
+                    case MessageEntityType.TextUrl:
+                        resultText.push(
+                            ...encode("]("),
+                            ...entity.argument,
+                            ...encode(")"),
+                        );
+                        utf16Added += 3 + entity.argument.length;
+                        break;
+                    case MessageEntityType.Code:
+                        resultText.push(...encode("`"));
+                        utf16Added++;
+                        break;
+                    case MessageEntityType.Pre:
+                        resultText.push(...encode("```"));
+                        utf16Added += 3;
+                        break;
+                    default:
+                        result.entities.push(entity);
+                        result.entities.at(-1)!.offset += nestedEntitiesStack.at(-1)!.utf16AddedBefore;
+                        result.entities.at(-1)!.length += utf16Added - nestedEntitiesStack.at(-1)!.utf16AddedBefore;
+                        break;
+                }
+                nestedEntitiesStack.pop();
+            }
+
+            while (currentEntity < text.entities.length && utf16Offset >= text.entities[currentEntity].offset) {
+                CHECK(utf16Offset === text.entities[currentEntity].offset);
+                switch (text.entities[currentEntity].type) {
+                    case MessageEntityType.Italic:
+                        resultText.push(...encode("__"));
+                        utf16Added += 2;
+                        break;
+                    case MessageEntityType.Bold:
+                        resultText.push(...encode("**"));
+                        utf16Added += 2;
+                        break;
+                    case MessageEntityType.Strikethrough:
+                        resultText.push(...encode("~~"));
+                        utf16Added += 2;
+                        break;
+                    case MessageEntityType.Spoiler:
+                        resultText.push(...encode("||"));
+                        utf16Added += 2;
+                        break;
+                    case MessageEntityType.TextUrl:
+                        resultText.push(...encode("["));
+                        utf16Added++;
+                        break;
+                    case MessageEntityType.Code:
+                        resultText.push(...encode("`"));
+                        utf16Added++;
+                        break;
+                    case MessageEntityType.Pre:
+                        resultText.push(...encode("```"));
+                        utf16Added += 3;
+                        break;
+                    default:
+                        // keep as is
+                        break;
+                }
+                nestedEntitiesStack.push({
+                    entity: text.entities[currentEntity++],
+                    utf16AddedBefore: utf16Added,
+                });
+            }
+            utf16Offset += 1 + (c >= 0xf0 ? 1 : 0);
+        }
+        if (pos == text.text.length) {
+            break;
+        }
+
+        resultText.push(text.text[pos]);
+    }
+
+    result.text = Uint8Array.from(resultText);
+    result.entities = sortEntities(result.entities);
+    if (parseMarkdownV3(result) != text) {
+        return text;
     }
     return result;
 }
@@ -2772,4 +3432,28 @@ export function fixFormattedText(
     entities = entities2;
 
     return { ok: true, entities, text };
+}
+
+export function hasMediaTimestamps(text: FormattedText, minMediaTimestamp: number, maxMediaTimestamp: number) {
+    if (text == null) {
+        return false;
+    }
+    for (const entity of text.entities) {
+        if (entity.type === MessageEntityType.MediaTimestamp && minMediaTimestamp <= entity.mediaTimestamp && entity.mediaTimestamp <= maxMediaTimestamp) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export function hasBotCommands(text: FormattedText) {
+    if (text == null) {
+        return false;
+    }
+    for (const entity of text.entities) {
+        if (entity.type === MessageEntityType.BotCommand) {
+            return true;
+        }
+    }
+    return false;
 }
